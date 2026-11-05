@@ -199,6 +199,20 @@ await user.getByLabel("Apelido").fill("Jota");
 await user.getByLabel("Bio").fill("Louvor, futebol e café. Procuro alguém para caminhar junto.");
 await user.getByText("Homem", { exact: true }).click();
 await user.getByLabel("Data de nascimento").fill("2015-01-01");
+await user.getByLabel("Estado").selectOption("SP");
+await user.getByLabel("Cidade").fill("São Paulo");
+await user.getByLabel("Bairro").fill("Vila Mariana");
+await user.getByRole("button", { name: "Praia", exact: true }).click();
+await user.getByRole("button", { name: "Café", exact: true }).click();
+await user.getByLabel("Emoji do gosto").fill("ab");
+await user.getByLabel("Nome do gosto").fill("Quebra-cabeça");
+await user.getByRole("button", { name: "Adicionar gosto" }).click();
+await user.getByText("Use um emoji só.").waitFor();
+check("gosto sem emoji é recusado", (await user.getByRole("button", { name: "Remover Quebra-cabeça" }).count()) === 0);
+await user.getByLabel("Emoji do gosto").fill("🧩");
+await user.getByRole("button", { name: "Adicionar gosto" }).click();
+await user.getByRole("button", { name: "Remover Quebra-cabeça" }).waitFor();
+check("com 3 gostos as sugestões travam", await user.getByRole("button", { name: "Trilha", exact: true }).isDisabled());
 await user.getByLabel("WhatsApp").fill("11987654321");
 await shot(user, "08-onboarding-preenchido");
 
@@ -207,11 +221,24 @@ await user.getByText("O app é só para maiores de 18 anos.").waitFor();
 check("menor de idade é barrado", true);
 check("erro mantém a bio", (await user.getByLabel("Bio").inputValue()).startsWith("Louvor"));
 check("erro mantém a mídia", (await user.locator('input[name="photo_paths"]').count()) === 1);
+check("erro mantém os gostos", (await user.locator('input[name="hobbies"]').inputValue()).includes("Quebra-cabeça"));
+check("erro mantém a cidade", (await user.getByLabel("Cidade").inputValue()) === "São Paulo");
 
 await user.getByLabel("Data de nascimento").fill("2000-01-01");
 await user.getByRole("button", { name: "Concluir perfil" }).click();
 await user.waitForURL("**/inicio");
 check("perfil completo libera a home", user.url().endsWith("/inicio"));
+
+const savedProfile = (await sql(`select state, city, neighborhood, hobbies from profiles where id='${userId}'`))[0];
+check(
+  "localização e gostos são salvos",
+  savedProfile.state === "SP" && savedProfile.city === "São Paulo" && savedProfile.neighborhood === "Vila Mariana" && savedProfile.hobbies.length === 3,
+  savedProfile,
+);
+
+// Sem o U+FE0F e com a cidade em outra grafia: o que o usuário escolheu precisa casar mesmo assim.
+// Vem antes do seed: o execSync trava o Node, e o fetch seguinte pegaria uma conexão já fechada.
+await sql(`update profiles set state='SP', city='sao  paulo', hobbies='[{"emoji":"\u{1F3D6}","hobbie":"Praia"},{"emoji":"🎯","hobbie":"Dardos"}]' where gender='female'`);
 
 // Metade dos perfis de exemplo curte o usuário novo.
 execSync("npx tsx scripts/seed-demo.ts", { cwd: projectRoot, env: process.env, stdio: "pipe" });
@@ -221,6 +248,18 @@ await user.reload();
 await user.getByRole("button", { name: "Curtir" }).waitFor();
 await user.waitForTimeout(600);
 await shot(user, "09-home");
+const cardCommonMark = user.getByRole("article").getByText("em comum");
+const cardOtherHobby = user.getByRole("article").getByText("Dardos");
+check("card mostra todos os gostos", await cardOtherHobby.isVisible());
+check(
+  "card destaca só o gosto em comum",
+  (await cardCommonMark.count()) === 1 &&
+    (await cardCommonMark.evaluate((mark) => mark.parentElement.className)).includes("bg-coral") &&
+    !(await cardOtherHobby.evaluate((tag) => tag.className)).includes("bg-coral"),
+);
+check("card mostra a mesma região", await user.getByRole("article").getByText("Da sua região").isVisible());
+const cardPlace = await user.getByRole("article").getByText(/, sao\s+paulo - SP$/).textContent();
+check("card mostra bairro, cidade e estado", cardPlace.split(",")[0].length > 0, cardPlace);
 check("home tem o gradiente animado", (await user.locator("main > .animate-brand-gradient:visible").count()) === 1);
 const liveLayers = await user
   .locator("main > .animate-brand-gradient:visible")
@@ -265,7 +304,23 @@ const overlay = user.getByRole("dialog");
 async function dismissMatch() {
   if ((await overlay.count()) === 0) return false;
   matches += 1;
-  if (matches === 1) await shot(user, "12-match");
+  if (matches === 1) {
+    await user.waitForTimeout(1400);
+    await shot(user, "12-match");
+    check("match mostra o que há em comum", (await overlay.getByText("em comum").count()) === 1);
+    // O coração pulsa sem parar, e o Playwright só clica sozinho no que está parado.
+    await overlay.getByRole("button", { name: "Soltar corações" }).click({ force: true });
+    await user.waitForTimeout(300);
+    await shot(user, "12-match-coracoes");
+    await overlay.getByRole("button", { name: "Mandar mensagem no WhatsApp" }).click();
+    const matchPaywall = user.getByRole("dialog", { name: "WhatsApp é do Pro" });
+    await matchPaywall.waitFor();
+    await user.waitForTimeout(400);
+    await shot(user, "12-match-paywall");
+    check("no match, quem não é Pro conhece o plano", true);
+    await matchPaywall.getByRole("button", { name: "Fechar" }).click();
+    await matchPaywall.waitFor({ state: "hidden" });
+  }
   await user.getByRole("button", { name: "Continuar" }).click();
   await user.waitForTimeout(350);
   return true;
@@ -506,15 +561,18 @@ await admin.getByRole("button", { name: "Ir para o app" }).click();
 await admin.waitForURL("**/perfil/editar");
 check("admin sem perfil cai no onboarding", admin.url().endsWith("/perfil/editar"));
 await admin.getByLabel("Apelido").waitFor();
-check("nome do admin vem do e-mail", (await admin.getByLabel("Nome").inputValue()) === "admin");
+check("nome do admin vem do e-mail", (await admin.getByLabel("Nome", { exact: true }).inputValue()) === "admin");
 
 await admin.locator('input[accept="image/*"]').first().setInputFiles(photoPath);
 await admin.locator('input[name="photo_paths"]').first().waitFor({ state: "attached" });
-await admin.getByLabel("Nome").fill("Dono do App");
+await admin.getByLabel("Nome", { exact: true }).fill("Dono do App");
 await admin.getByLabel("Apelido").fill("Dono");
 await admin.getByLabel("Bio").fill("Testando o app.");
 await admin.getByText("Homem", { exact: true }).click();
 await admin.getByLabel("Data de nascimento").fill("1995-05-05");
+await admin.getByLabel("Estado").selectOption("RJ");
+await admin.getByLabel("Cidade").fill("Niterói");
+await admin.getByLabel("Bairro").fill("Icaraí");
 await admin.getByLabel("WhatsApp").fill("11955554444");
 await admin.getByRole("button", { name: "Concluir perfil" }).click();
 await admin.waitForURL("**/inicio");
@@ -572,7 +630,8 @@ async function createMember(key, nickname, gender, pro) {
     values ('${created.id}', '${nickname}', '${nickname}', 'Bio', '${gender}', '1996-04-04', array['${created.id}/a.jpg'], ${pro})`);
   await sql(`insert into public.profile_contacts (user_id, whatsapp) values ('${created.id}', '5511977776666')`);
 
-  const context = await browser.newContext(mobile);
+  // Sem GPU, cada aba com o fundo animado disputa a CPU, e os cliques chegam com segundos de atraso.
+  const context = await browser.newContext({ ...mobile, reducedMotion: "reduce" });
   await freezeStories(context);
   const page = await context.newPage();
   watch(page, key);
@@ -633,7 +692,9 @@ await bia.keyboard.press("Escape");
 check("abrir o story conta a visualização", await waitForRows("story_views", 1));
 check("curtir o story é gravado", await waitForRows("story_likes", 1));
 
+// Sem esperar, o clique pode chegar antes da hidratação e se perder.
 await bia.reload();
+await bia.waitForLoadState("networkidle");
 await bia.getByRole("button", { name: "Ver story de Jotinha" }).click();
 await biaViewer.getByRole("button", { name: "Descurtir story" }).waitFor();
 check("story curtido continua curtido", true);
@@ -641,6 +702,7 @@ check("rever não conta duas visualizações", (await countRows("story_views")) 
 await bia.keyboard.press("Escape");
 
 await user.reload();
+await user.waitForLoadState("networkidle");
 await ownStoryButton.click();
 await ownViewer.getByRole("button", { name: "Visto por 1 · 1 curtida" }).click();
 await ownViewer.getByText("Bia", { exact: true }).waitFor();
@@ -672,8 +734,8 @@ await user.keyboard.press("Escape");
 await ownViewer.waitFor({ state: "hidden" });
 
 await user.evaluate((id) => document.getElementById(id)?.remove(), FREEZE_ID);
-await ownStoryButton.click();
-await ownViewer.waitFor();
+// O vídeo dura 2 segundos: esperar o clique terminar para só então olhar perde o story aberto.
+await Promise.all([ownViewer.waitFor(), ownStoryButton.click()]);
 await ownViewer.waitFor({ state: "hidden", timeout: 15000 });
 check("story fecha sozinho no fim", true);
 
@@ -712,6 +774,24 @@ const likerLinks = user.locator('main a[href^="/perfil/"]:visible');
 await likerLinks.first().waitFor();
 check("Pro vê quem curtiu", (await likerLinks.count()) === likesReceived, { likesReceived });
 await shot(user, "35-quem-curtiu");
+
+// Quem é Pro chama direto do match.
+await sql(`delete from swipes where swiper_id='${userId}'`);
+await sql(`insert into swipes (swiper_id, target_id, action)
+  select id, '${userId}', 'like' from profiles where gender='female'
+  on conflict (swiper_id, target_id) do update set action='like'`);
+await user.goto(`${APP}/inicio`);
+await user.waitForLoadState("networkidle");
+await user.getByRole("button", { name: "Curtir" }).click();
+const proMatch = user.getByRole("dialog", { name: "Deu match!" });
+await proMatch.waitFor();
+await user.waitForTimeout(1400);
+await shot(user, "36-match-pro");
+const matchHref = await proMatch.getByRole("link", { name: "Mandar mensagem no WhatsApp" }).getAttribute("href");
+check("Pro chama no WhatsApp direto do match", matchHref?.startsWith("https://wa.me/55") && decodeURIComponent(matchHref).includes("Deu match"), matchHref);
+await proMatch.getByRole("button", { name: "Continuar" }).click();
+await proMatch.waitFor({ state: "hidden" });
+
 await sql(`update profiles set is_pro = false where id='${userId}'`);
 
 for (const { context } of Object.values(members)) await context.close();
@@ -724,25 +804,129 @@ for (const { context } of Object.values(members)) await context.close();
     userAgent:
       "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
   });
+  const INSTALL_GUIDE = "Adicione o app à tela inicial";
+  const logIn = async (target) => {
+    await target.getByLabel("E-mail").fill(EMAIL);
+    await target.getByLabel("Senha").fill(PASSWORD);
+    await target.getByRole("button", { name: "Entrar" }).click();
+    await target.waitForURL("**/inicio");
+  };
+
   const page = await iphone.newPage();
   await page.goto(`${APP}/entrar`);
-  await page.getByLabel("E-mail").fill(EMAIL);
-  await page.getByLabel("Senha").fill(PASSWORD);
-  await page.getByRole("button", { name: "Entrar" }).click();
-  await page.waitForURL("**/inicio");
+  await logIn(page);
+  const guide = page.getByRole("dialog", { name: INSTALL_GUIDE });
+  await guide.waitFor();
+  await page.waitForTimeout(600);
+  await shot(page, "25-guia-iphone");
+  check("iOS ensina a instalar logo depois do login", await guide.getByText("Adicionar à Tela de Início").isVisible());
+  const dismiss = guide.getByRole("button", { name: "Agora não" });
+  const dismissBox = await dismiss.boundingBox();
+  check("guia cabe no iPhone pequeno", dismissBox.y + dismissBox.height <= 667, dismissBox);
+
+  await dismiss.click();
+  await guide.waitFor({ state: "hidden" });
   await sql(`delete from swipes where swiper_id='${userId}'`);
   await page.reload();
   await page.getByRole("button", { name: "Curtir" }).waitFor();
   await page.waitForTimeout(600);
   await shot(page, "25-iphone-pequeno");
-  const instructions = page.getByText("Para instalar, toque em Compartilhar");
-  check("iOS mostra como instalar", await instructions.isVisible());
-  await page.getByRole("button", { name: "Dispensar" }).click();
+  check("guia dispensado não volta", !(await guide.isVisible()));
+
+  const dismissedDaysAgo = (days) =>
+    page.evaluate(
+      (at) => localStorage.setItem("install-guide-dismissed", String(at)),
+      Date.now() - days * 24 * 60 * 60 * 1000,
+    );
+  await dismissedDaysAgo(2);
   await page.reload();
   await page.getByRole("button", { name: "Curtir" }).waitFor();
   await page.waitForTimeout(400);
-  check("aviso dispensado não volta", !(await instructions.isVisible()));
+  check("guia respeita o intervalo do lembrete", !(await guide.isVisible()));
+  await dismissedDaysAgo(4);
+  await page.reload();
+  await guide.waitFor();
+  check("guia volta depois do intervalo", true);
+  await dismiss.click();
+  await guide.waitFor({ state: "hidden" });
+
+  await page.goto(`${APP}/perfil/editar`);
+  await page.getByRole("button", { name: "Sair" }).click();
+  await page.waitForURL("**/entrar");
+  await logIn(page);
+  await guide.waitFor();
+  check("guia volta no login seguinte", true);
+
+  const installed = await iphone.newPage();
+  await installed.addInitScript(() => Object.defineProperty(navigator, "standalone", { value: true }));
+  await installed.goto(`${APP}/inicio`);
+  await installed.getByRole("button", { name: "Curtir" }).waitFor();
+  await installed.waitForTimeout(400);
+  check(
+    "com o app instalado o guia não aparece",
+    !(await installed.getByRole("dialog", { name: INSTALL_GUIDE }).isVisible()),
+  );
+  const accountMarked = async () => {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const [profile] = await sql(`select app_installed_at from profiles where id='${userId}'`);
+      if (profile.app_installed_at) return true;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return false;
+  };
+  check("abrir o app instalado marca a conta", await accountMarked());
+
+  // Sem a dispensa no storage, só a marca da conta segura o guia, como no Safari do iPhone.
+  await page.evaluate(() => localStorage.removeItem("install-guide-dismissed"));
+  await page.reload();
+  await page.getByRole("button", { name: "Curtir" }).waitFor();
+  await page.waitForTimeout(400);
+  check("depois de instalar o navegador não lembra mais", !(await guide.isVisible()));
   await iphone.close();
+  await sql(`update profiles set app_installed_at = null where id='${userId}'`);
+
+  const android = await browser.newContext({
+    ...mobile,
+    userAgent:
+      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+  });
+  const droid = await android.newPage();
+  watch(droid, "android");
+  await droid.goto(`${APP}/entrar`);
+  await droid.waitForLoadState("networkidle");
+  // O Chrome dispara o evento antes do login, e o login não recarrega a página.
+  await droid.evaluate(() => {
+    const event = new Event("beforeinstallprompt", { cancelable: true });
+    event.prompt = async () => {
+      window.installPrompted = true;
+    };
+    window.dispatchEvent(event);
+  });
+  await logIn(droid);
+  const droidGuide = droid.getByRole("dialog", { name: INSTALL_GUIDE });
+  await droidGuide.waitFor();
+  await droid.waitForTimeout(600);
+  await shot(droid, "27-guia-android");
+  await droidGuide.getByRole("button", { name: "Instalar agora" }).click();
+  await droidGuide.waitFor({ state: "hidden" });
+  check("Android instala em um toque depois do login", await droid.evaluate(() => window.installPrompted === true));
+
+  // Sem o evento, como no Firefox, sobra o caminho pelo menu do navegador.
+  // Quem fechou o banner antigo ainda tem a chave dele, e isso não pode esconder o guia.
+  await droid.evaluate(() => {
+    localStorage.removeItem("install-guide-dismissed");
+    localStorage.setItem("install-prompt-dismissed", "1");
+  });
+  await droid.reload();
+  await droidGuide.waitFor();
+  await droid.waitForTimeout(600);
+  await shot(droid, "28-guia-android-menu");
+  check("Android sem o evento ensina pelo menu", await droidGuide.getByText("Instalar app").isVisible());
+
+  await droid.evaluate(() => window.dispatchEvent(new Event("appinstalled")));
+  await droidGuide.waitFor({ state: "hidden" });
+  check("instalar no Android marca a conta na hora", await accountMarked());
+  await android.close();
 
   const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: "pt-BR" });
   const site = await desktop.newPage();

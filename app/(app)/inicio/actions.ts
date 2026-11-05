@@ -16,7 +16,7 @@ import type {
   SwipeAction,
 } from "@/lib/types";
 
-export type SwipeResult = { ok: true; match: boolean } | { ok: false };
+export type SwipeResult = { ok: true; match: boolean; whatsapp: string | null } | { ok: false };
 
 export type StoryResult = { ok: true } | { ok: false; message: string };
 
@@ -40,6 +40,17 @@ const STORY_ERRORS: Record<string, string> = {
   foreign_media: "Não reconhecemos esse arquivo. Envie de novo.",
 };
 
+export async function markAppInstalled() {
+  const { user } = await requireMember();
+  const { error } = await createAdminClient()
+    .from("profiles")
+    .update({ app_installed_at: new Date().toISOString() })
+    .eq("id", user.id)
+    .is("app_installed_at", null);
+
+  if (error) console.error("markAppInstalled", error);
+}
+
 // Sem requireMember: a RPC já exige sessão e perfil completo, e o swipe precisa ser rápido.
 export async function recordSwipe(targetId: string, action: SwipeAction): Promise<SwipeResult> {
   const parsed = swipeSchema.safeParse({ targetId, action });
@@ -56,11 +67,20 @@ export async function recordSwipe(targetId: string, action: SwipeAction): Promis
     return { ok: false };
   }
 
-  return { ok: true, match: data === true };
+  if (data !== true) return { ok: true, match: false, whatsapp: null };
+
+  // A RLS só devolve o número para quem é Pro: para os outros, vem nulo.
+  const { data: contact } = await supabase
+    .from("profile_contacts")
+    .select("whatsapp")
+    .eq("user_id", parsed.data.targetId)
+    .maybeSingle();
+
+  return { ok: true, match: true, whatsapp: contact?.whatsapp ?? null };
 }
 
 export async function loadMoreCards(): Promise<DeckCard[] | null> {
-  await requireMember();
+  const { profile } = await requireMember();
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("discover_profiles", { p_limit: DECK_SIZE });
@@ -70,7 +90,7 @@ export async function loadMoreCards(): Promise<DeckCard[] | null> {
     return null;
   }
 
-  return toDeckCards(data as PublicProfile[]);
+  return toDeckCards(data as PublicProfile[], profile);
 }
 
 // Quem posta limpa os próprios stories vencidos, para eles não ocuparem o Storage para sempre.

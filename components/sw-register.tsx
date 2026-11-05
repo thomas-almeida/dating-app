@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+// Começa a escutar o evento de instalação em qualquer página, antes do login.
+import "@/lib/install";
 
 export function SwRegister() {
   useEffect(() => {

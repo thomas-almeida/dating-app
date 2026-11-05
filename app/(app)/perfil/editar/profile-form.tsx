@@ -5,12 +5,13 @@ import { useActionState, useState, type ChangeEvent, type ReactNode } from "reac
 import { Field, FormMessage, inputClass, textareaClass } from "@/components/field";
 import { LoopVideo } from "@/components/loop-video";
 import { SubmitButton } from "@/components/submit-button";
-import { MAX_PHOTOS, MAX_VIDEO_SECONDS, MEDIA_BUCKET } from "@/lib/config";
+import { BRAZIL_STATES, MAX_PHOTOS, MAX_VIDEO_SECONDS, MEDIA_BUCKET } from "@/lib/config";
 import { MediaError, uploadPhoto, uploadVideo, VIDEO_ACCEPT } from "@/lib/media-upload";
 import { maskPhone } from "@/lib/phone";
 import { createClient } from "@/lib/supabase/client";
-import type { FormState, Gender } from "@/lib/types";
+import type { FormState, Gender, Hobby } from "@/lib/types";
 import { saveProfile } from "./actions";
+import { HobbyPicker } from "./hobby-picker";
 
 export type MediaItem = { path: string; url: string };
 
@@ -20,6 +21,10 @@ type ProfileValues = {
   bio: string;
   gender: Gender | null;
   birthDate: string;
+  state: string;
+  city: string;
+  neighborhood: string;
+  hobbies: Hobby[];
   whatsapp: string;
 };
 
@@ -271,6 +276,8 @@ export function ProfileForm({
         />
       </Field>
 
+      <HobbyPicker value={values.hobbies} onChange={(hobbies) => update("hobbies", hobbies)} />
+
       {/* defaultChecked e não checked: o reset desmarcaria um rádio controlado sem avisar o estado. */}
       <fieldset>
         <legend className="mb-1.5 block text-sm font-medium text-cream">Você é</legend>
@@ -303,6 +310,49 @@ export function ProfileForm({
           value={values.birthDate}
           onChange={(event) => update("birthDate", event.target.value)}
           className={`${inputClass} scheme-dark`}
+        />
+      </Field>
+
+      <div className="grid grid-cols-[6rem_1fr] gap-3">
+        <Field label="Estado">
+          <select
+            name="state"
+            required
+            autoComplete="address-level1"
+            value={values.state}
+            onChange={(event) => update("state", event.target.value)}
+            className={`${inputClass} scheme-dark`}
+          >
+            <option value="" disabled>
+              UF
+            </option>
+            {BRAZIL_STATES.map((state) => (
+              <option key={state}>{state}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Cidade">
+          <input
+            name="city"
+            required
+            maxLength={80}
+            autoComplete="address-level2"
+            value={values.city}
+            onChange={(event) => update("city", event.target.value)}
+            className={inputClass}
+          />
+        </Field>
+      </div>
+
+      <Field label="Bairro" hint="Aparece no seu card para as outras pessoas.">
+        <input
+          name="neighborhood"
+          required
+          maxLength={80}
+          autoComplete="address-level3"
+          value={values.neighborhood}
+          onChange={(event) => update("neighborhood", event.target.value)}
+          className={inputClass}
         />
       </Field>
 

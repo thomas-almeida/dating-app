@@ -21,6 +21,10 @@ const BOTS = [
     gender: "female",
     birthDate: "2002-06-12",
     bio: "Viagem de trem, mesa cheia e louvor no domingo. Procuro alguém para caminhar junto, sem pressa e com propósito.",
+    state: "SP",
+    city: "São Paulo",
+    neighborhood: "Perdizes",
+    hobbies: [{ emoji: "✈️", hobbie: "Viagens" }, { emoji: "🙌", hobbie: "Louvor" }, { emoji: "🍳", hobbie: "Cozinhar" }],
     photos: ["public/bot/bot-user-1/fulana-3.jpg", "public/bot/bot-user-1/fulana-2.jpg"],
   },
   {
@@ -29,6 +33,10 @@ const BOTS = [
     gender: "female",
     birthDate: "2000-02-20",
     bio: "Vivo de mala pronta, mas meu lugar preferido ainda é o culto de domingo. Gosto de gente que ri de si mesma.",
+    state: "SP",
+    city: "Santos",
+    neighborhood: "Gonzaga",
+    hobbies: [{ emoji: "✈️", hobbie: "Viagens" }, { emoji: "🏖️", hobbie: "Praia" }],
     photos: ["public/bot/bot-user-2/fulana-1.jpg", "public/bot/bot-user-2/fulana-3.jpg"],
   },
   {
@@ -37,6 +45,10 @@ const BOTS = [
     gender: "female",
     birthDate: "1999-09-08",
     bio: "Canto no louvor da minha igreja e não dispenso um pôr do sol. Procuro alguém com os mesmos valores para construir algo de verdade.",
+    state: "RJ",
+    city: "Rio de Janeiro",
+    neighborhood: "Botafogo",
+    hobbies: [{ emoji: "🙌", hobbie: "Louvor" }, { emoji: "🏖️", hobbie: "Praia" }],
     photos: ["public/bot/bot-user-3/fulana-1.jpg", "public/bot/bot-user-3/fulana-2.jpg"],
     video: "public/bot/bot-user-3/fulana-3.mp4",
   },
@@ -121,6 +133,10 @@ async function createBot(supabase: SupabaseClient, bot: (typeof BOTS)[number], i
       bio: bot.bio,
       gender: bot.gender,
       birth_date: bot.birthDate,
+      state: bot.state,
+      city: bot.city,
+      neighborhood: bot.neighborhood,
+      hobbies: bot.hobbies,
       video_path: videoPath,
       photo_paths: photoPaths,
     })
@@ -151,13 +167,25 @@ async function refreshStories(supabase: SupabaseClient, botIds: string[]) {
   if (insertError) throw insertError;
 }
 
+// Quem já existe só ganha os dados novos: mídia, curtidas e stories continuam como estão.
+async function refreshBot(supabase: SupabaseClient, id: string, bot: (typeof BOTS)[number]) {
+  const { state, city, neighborhood, hobbies } = bot;
+  const { error } = await supabase
+    .from("profiles")
+    .update({ state, city, neighborhood, hobbies })
+    .eq("id", id);
+  if (error) throw error;
+  return id;
+}
+
 async function seed(supabase: SupabaseClient) {
   const users = await listUsers(supabase);
   const existing = new Map(users.map((user) => [user.email, user.id]));
 
   const botIds: string[] = [];
   for (const [index, bot] of BOTS.entries()) {
-    botIds.push(existing.get(emailOf(index)) ?? (await createBot(supabase, bot, index)));
+    const id = existing.get(emailOf(index));
+    botIds.push(id ? await refreshBot(supabase, id, bot) : await createBot(supabase, bot, index));
   }
 
   const { data: profiles, error } = await supabase

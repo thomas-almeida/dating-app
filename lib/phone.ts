@@ -17,6 +17,10 @@ export function maskPhone(input: string): string {
   return `(${ddd}) ${rest.slice(0, split)}-${rest.slice(split)}`;
 }
 
+export function whatsappUrl(phone: string, text: string) {
+  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+}
+
 // Tira o 55 para exibir no formulário.
 export function displayPhone(stored: string): string {
   return maskPhone(stored.startsWith("55") ? stored.slice(2) : stored);

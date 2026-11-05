@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { Field, FormMessage, inputClass } from "@/components/field";
 import { SubmitButton } from "@/components/submit-button";
+import { resetInstallDismissal } from "@/lib/install";
 import type { FormState } from "@/lib/types";
 import { signIn } from "./actions";
 
@@ -14,7 +15,7 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} onSubmit={resetInstallDismissal} className="space-y-4">
       <Field label="E-mail">
         <input
           name="email"

@@ -35,7 +35,7 @@ async function Content() {
   const avatarPath = profile.photo_paths[0];
 
   const [cards, urls] = await Promise.all([
-    toDeckCards((discovered.data ?? []) as PublicProfile[]),
+    toDeckCards((discovered.data ?? []) as PublicProfile[], profile),
     signPaths([
       avatarPath,
       ...storyProfiles.map((story) => story.photo_path),
@@ -101,13 +101,21 @@ async function Content() {
         }))}
       />
 
-      <InstallPrompt className="mx-5 mt-2 shrink-0" />
-
-      <Deck initialCards={cards} />
+      <Deck
+        initialCards={cards}
+        viewer={{
+          name: profile.nickname ?? profile.name,
+          photoUrl: avatarUrl ?? null,
+          isPro: profile.is_pro,
+        }}
+      />
 
       <div className="shrink-0">
         <BottomNav active="inicio" />
       </div>
+
+      {/* Boolean, e não !== null: antes da migration 0003 a coluna vem undefined. */}
+      <InstallPrompt installed={Boolean(profile.app_installed_at)} />
     </>
   );
 }

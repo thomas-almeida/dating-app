@@ -275,7 +275,9 @@ async function handleRest(req, res, url, rawBody) {
 
   if (req.method === "PATCH") {
     const body = JSON.parse(rawBody.toString());
-    const assignments = Object.entries(body).map(([key, value]) => `${ident(key)} = ${lit(value)}`).join(",");
+    // A lista de gostos é jsonb: como array comum, viraria um array do Postgres.
+    const toSql = (key, value) => (key === "hobbies" ? lit({ toJSON: () => value }) : lit(value));
+    const assignments = Object.entries(body).map(([key, value]) => `${ident(key)} = ${toSql(key, value)}`).join(",");
     const sql = `with changed as (
       update ${target} set ${assignments} ${whereClause(params)} returning *
     ) select coalesce(json_agg(t), '[]'::json) as rows from (select ${select} from changed) t`;

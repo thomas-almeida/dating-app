@@ -19,6 +19,10 @@ const PEOPLE = [
     gender: "female",
     birthDate: "2001-03-14",
     bio: "Louvor aos domingos, café forte e trilha no sábado. Procuro alguém para caminhar junto, na fé e na vida.",
+    state: "SP",
+    city: "São Paulo",
+    neighborhood: "Vila Mariana",
+    hobbies: [{ emoji: "☕", hobbie: "Café" }, { emoji: "🥾", hobbie: "Trilha" }, { emoji: "🙌", hobbie: "Louvor" }],
     colors: ["#ff8a5b", "#a02c5c"],
   },
   {
@@ -27,6 +31,10 @@ const PEOPLE = [
     gender: "female",
     birthDate: "1999-08-02",
     bio: "Professora, leitora de Lewis e fã de um bom pão de queijo. Sirvo no ministério infantil.",
+    state: "SP",
+    city: "São Paulo",
+    neighborhood: "Pinheiros",
+    hobbies: [{ emoji: "📖", hobbie: "Leitura" }, { emoji: "☕", hobbie: "Café" }],
     colors: ["#f7b267", "#c8553d"],
   },
   {
@@ -35,6 +43,10 @@ const PEOPLE = [
     gender: "female",
     birthDate: "2002-11-21",
     bio: "Enfermeira em formação. Gosto de música, de mesa cheia e de conversa que vai longe.",
+    state: "RJ",
+    city: "Rio de Janeiro",
+    neighborhood: "Tijuca",
+    hobbies: [{ emoji: "🎵", hobbie: "Música" }, { emoji: "🍳", hobbie: "Cozinhar" }],
     colors: ["#e56b9e", "#5b2a86"],
   },
   {
@@ -43,6 +55,10 @@ const PEOPLE = [
     gender: "female",
     birthDate: "2000-05-30",
     bio: "Designer, viajante de fim de semana. A minha oração é ser fiel nas coisas pequenas.",
+    state: "MG",
+    city: "Belo Horizonte",
+    neighborhood: "Savassi",
+    hobbies: [{ emoji: "✈️", hobbie: "Viagens" }, { emoji: "🎨", hobbie: "Arte" }],
     colors: ["#ffa69e", "#b8336a"],
   },
   {
@@ -51,6 +67,10 @@ const PEOPLE = [
     gender: "male",
     birthDate: "1998-01-09",
     bio: "Engenheiro e violonista da igreja. Churrasco, futebol e estudo bíblico às quartas.",
+    state: "SP",
+    city: "São Paulo",
+    neighborhood: "Moema",
+    hobbies: [{ emoji: "⚽", hobbie: "Futebol" }, { emoji: "☕", hobbie: "Café" }],
     colors: ["#4ea8de", "#3a0ca3"],
   },
   {
@@ -59,6 +79,10 @@ const PEOPLE = [
     gender: "male",
     birthDate: "2000-07-17",
     bio: "Pedalo cedo, trabalho com dados e lidero um pequeno grupo de jovens. Quero construir algo sério.",
+    state: "SP",
+    city: "Campinas",
+    neighborhood: "Cambuí",
+    hobbies: [{ emoji: "🥾", hobbie: "Trilha" }, { emoji: "🎮", hobbie: "Games" }],
     colors: ["#48bfe3", "#1b4965"],
   },
   {
@@ -67,6 +91,10 @@ const PEOPLE = [
     gender: "male",
     birthDate: "1997-12-03",
     bio: "Médico residente. Quando sobra tempo: cozinha, Salmos e praia com os amigos.",
+    state: "RJ",
+    city: "Niterói",
+    neighborhood: "Icaraí",
+    hobbies: [{ emoji: "🏖️", hobbie: "Praia" }, { emoji: "🎵", hobbie: "Música" }],
     colors: ["#80ed99", "#22577a"],
   },
   {
@@ -75,6 +103,10 @@ const PEOPLE = [
     gender: "male",
     birthDate: "2001-09-25",
     bio: "Fotógrafo de casamento que ainda espera o próprio. Sirvo na recepção da igreja.",
+    state: "PR",
+    city: "Curitiba",
+    neighborhood: "Batel",
+    hobbies: [{ emoji: "🚴", hobbie: "Pedal" }, { emoji: "📖", hobbie: "Leitura" }],
     colors: ["#f4a261", "#264653"],
   },
 ];
@@ -160,6 +192,10 @@ async function createPerson(
       bio: person.bio,
       gender: person.gender,
       birth_date: person.birthDate,
+      state: person.state,
+      city: person.city,
+      neighborhood: person.neighborhood,
+      hobbies: person.hobbies,
       photo_paths: [path],
     })
     .eq("id", id);

@@ -283,6 +283,24 @@ async function run() {
   await as(ids.ana, "update public.profiles set bio = 'Nova bio' where id = $1", [ids.ana]);
   const bio = await db.query<{ bio: string }>("select bio from public.profiles where id = $1", [ids.ana]);
   check("usuário edita a bio", bio.rows[0].bio === "Nova bio", bio.rows);
+  await denied("cliente não marca o app como instalado", ids.ana, "update public.profiles set app_installed_at = now() where id = $1", [ids.ana]);
+
+  // Localização e gostos
+  const setHobbies = "update public.profiles set hobbies = $2::text::jsonb where id = $1";
+  await as(ids.ana, "update public.profiles set state = 'SP', city = 'Santos', neighborhood = 'Gonzaga' where id = $1", [ids.ana]);
+  await as(ids.ana, setHobbies, [ids.ana, '[{"emoji":"🏖","hobbie":"Praia"},{"emoji":"☕","hobbie":"Café"}]']);
+  const seenProfile = await as(ids.bruno, "select * from public.get_public_profile($1)", [ids.ana]);
+  check("perfil público traz localização e gostos", seenProfile[0]?.city === "Santos" && seenProfile[0]?.state === "SP" && seenProfile[0]?.neighborhood === "Gonzaga" && (seenProfile[0]?.hobbies as unknown[])?.length === 2, seenProfile);
+  const seenInDeck = (await as(ids.bruno, "select * from public.discover_profiles()")).find((person) => person.id === ids.ana);
+  check("descoberta traz localização e gostos", seenInDeck?.city === "Santos" && seenInDeck?.neighborhood === "Gonzaga" && (seenInDeck?.hobbies as unknown[])?.length === 2, seenInDeck);
+  const anonDiscover = await db.query<{ granted: boolean }>("select has_function_privilege('anon', 'public.discover_profiles(integer)', 'execute') as granted");
+  check("anon continua sem acesso à descoberta", anonDiscover.rows[0].granted === false, anonDiscover.rows);
+  await denied("no máximo 3 gostos", ids.ana, setHobbies, [ids.ana, JSON.stringify(Array.from({ length: 4 }, (_, index) => ({ emoji: "🏖", hobbie: `Praia ${index}` })))]);
+  await denied("gosto precisa de emoji e nome", ids.ana, setHobbies, [ids.ana, '[{"emoji":"🏖"}]']);
+  await denied("gosto precisa ser objeto", ids.ana, setHobbies, [ids.ana, '["Praia"]']);
+  await denied("gostos precisam ser uma lista", ids.ana, setHobbies, [ids.ana, '{"emoji":"🏖","hobbie":"Praia"}']);
+  await denied("nome de gosto gigante barrado", ids.ana, setHobbies, [ids.ana, JSON.stringify([{ emoji: "🏖", hobbie: "x".repeat(31) }])]);
+  await denied("estado precisa ser a sigla", ids.ana, "update public.profiles set state = 'São Paulo' where id = $1", [ids.ana]);
 
   // WhatsApp
   const contactsFree = await as(ids.ana, "select * from public.profile_contacts");

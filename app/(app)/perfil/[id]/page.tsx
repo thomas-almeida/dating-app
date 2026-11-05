@@ -1,4 +1,4 @@
-import { BadgeCheck, ChevronRight, Eye, Heart, Lock, Settings } from "lucide-react";
+import { BadgeCheck, ChevronRight, Eye, Heart, Lock, MapPin, Settings } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -6,14 +6,17 @@ import { Suspense } from "react";
 import { z } from "zod";
 import { BackButton } from "@/components/back-button";
 import { BottomNav } from "@/components/bottom-nav";
+import { HobbyTags } from "@/components/hobby-tags";
 import { LoopVideo } from "@/components/loop-video";
+import { WhatsAppButton } from "@/components/whatsapp-button";
 import { Wordmark } from "@/components/wordmark";
+import { placeLabel, sameRegion, tagHobbies } from "@/lib/affinity";
 import { APP_NAME } from "@/lib/config";
 import { requireMember } from "@/lib/dal";
 import { signPaths } from "@/lib/media";
+import { whatsappUrl } from "@/lib/phone";
 import { createClient } from "@/lib/supabase/server";
 import type { ProfileStats, PublicProfile } from "@/lib/types";
-import { WhatsAppButton } from "./whatsapp-button";
 
 export const metadata: Metadata = { title: "Perfil" };
 
@@ -80,10 +83,13 @@ async function Content({ params }: { params: PageProps<"/perfil/[id]">["params"]
   const gallery = videoUrl ? photos : photos.slice(1);
 
   const greeting = `Oi, ${displayName}! Vi seu perfil no ${APP_NAME}.`;
-  const whatsappUrl = contact
-    ? `https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(greeting)}`
-    : null;
-  const canAskToMessage = !isOwn && (whatsappUrl !== null || !viewer.profile.is_pro);
+  const whatsappHref = contact ? whatsappUrl(contact.whatsapp, greeting) : null;
+  const canAskToMessage = !isOwn && (whatsappHref !== null || !viewer.profile.is_pro);
+
+  // No próprio perfil não há o que destacar.
+  const hobbies = tagHobbies(isOwn ? [] : viewer.profile.hobbies, person.hobbies);
+  const nearby = !isOwn && sameRegion(viewer.profile, person);
+  const place = placeLabel(person);
 
   return (
     <>
@@ -123,6 +129,12 @@ async function Content({ params }: { params: PageProps<"/perfil/[id]">["params"]
               {person.age && <span className="shrink-0 font-normal">{person.age}</span>}
               <BadgeCheck className="size-6 shrink-0 text-coral" aria-label="Perfil aprovado" />
             </h1>
+            {place && (
+              <p className="mt-1 flex items-center gap-1 text-sm text-white/80">
+                <MapPin className="size-3.5 shrink-0" aria-hidden />
+                {place}
+              </p>
+            )}
             <div className="mt-2 flex flex-wrap gap-2 empty:hidden">
               {person.is_match && (
                 <span className="flex items-center gap-1.5 rounded-full bg-coral px-3 py-1 text-xs font-semibold text-ink">
@@ -135,6 +147,7 @@ async function Content({ params }: { params: PageProps<"/perfil/[id]">["params"]
                   Pro
                 </span>
               )}
+              <HobbyTags hobbies={hobbies} sameRegion={nearby} />
             </div>
           </div>
         </section>
@@ -163,7 +176,7 @@ async function Content({ params }: { params: PageProps<"/perfil/[id]">["params"]
       {canAskToMessage && (
         <div className="pb-safe fixed inset-x-0 bottom-0 z-10 mx-auto w-full max-w-md bg-linear-to-t from-ink via-ink/90 to-transparent px-5 pt-8">
           <div className="mb-4">
-            <WhatsAppButton href={whatsappUrl} />
+            <WhatsAppButton href={whatsappHref} />
           </div>
         </div>
       )}

@@ -62,6 +62,10 @@ async function Content() {
             bio: profile.bio ?? "",
             gender: profile.gender,
             birthDate: profile.birth_date ?? "",
+            state: profile.state ?? "",
+            city: profile.city ?? "",
+            neighborhood: profile.neighborhood ?? "",
+            hobbies: profile.hobbies ?? [],
             whatsapp: contact ? displayPhone(contact.whatsapp) : "",
           }}
           initialVideo={toItem(profile.video_path)}

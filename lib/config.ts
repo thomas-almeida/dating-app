@@ -20,3 +20,13 @@ export const SIGNED_URL_TTL_SECONDS = 60 * 60;
 export const DECK_SIZE = 20;
 export const STORY_COUNT = 12;
 export const STORY_TTL_HOURS = 24;
+
+export const MAX_HOBBIES = 3;
+
+export const BRAZIL_STATES = [
+  "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA",
+  "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
+] as const;
+
+// Depois de "Agora não", o guia de instalação volta nesse intervalo até a pessoa instalar.
+export const INSTALL_REMINDER_DAYS = 3;

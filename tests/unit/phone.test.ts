@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { displayPhone, maskPhone, normalizePhone } from "@/lib/phone";
+import { displayPhone, maskPhone, normalizePhone, whatsappUrl } from "@/lib/phone";
+
+test("whatsappUrl leva o número e escapa a mensagem", () => {
+  assert.equal(
+    whatsappUrl("5511912345678", "Oi, Bia! Deu match?"),
+    "https://wa.me/5511912345678?text=Oi%2C%20Bia!%20Deu%20match%3F",
+  );
+});
 
 test("normalizePhone coloca o 55 em DDD + número", () => {
   assert.equal(normalizePhone("(11) 91234-5678"), "5511912345678");

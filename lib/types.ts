@@ -3,6 +3,9 @@ export type WaitlistStatus = "pending" | "approved" | "rejected" | "activated";
 export type SwipeAction = "like" | "pass";
 export type SubscriptionStatus = "pending" | "active" | "cancelled";
 
+export type Hobby = { emoji: string; hobbie: string };
+export type HobbyTag = Hobby & { common: boolean };
+
 export type Profile = {
   id: string;
   name: string;
@@ -13,7 +16,12 @@ export type Profile = {
   video_path: string | null;
   photo_paths: string[];
   is_pro: boolean;
+  state: string | null;
+  city: string | null;
+  neighborhood: string | null;
+  hobbies: Hobby[];
   onboarded_at: string | null;
+  app_installed_at: string | null;
   created_at: string;
 };
 
@@ -50,6 +58,10 @@ export type PublicProfile = {
   video_path: string | null;
   photo_paths: string[];
   is_pro: boolean;
+  state: string | null;
+  city: string | null;
+  neighborhood: string | null;
+  hobbies: Hobby[];
 };
 
 export type StoryProfile = {
@@ -132,6 +144,9 @@ export type DeckCard = {
   isPro: boolean;
   videoUrl: string | null;
   posterUrl: string | null;
+  place: string | null;
+  hobbies: HobbyTag[];
+  sameRegion: boolean;
 };
 
 export type FormState = {

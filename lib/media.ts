@@ -1,7 +1,8 @@
 import "server-only";
+import { placeLabel, sameRegion, tagHobbies } from "@/lib/affinity";
 import { MEDIA_BUCKET, SIGNED_URL_TTL_SECONDS } from "@/lib/config";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { DeckCard, PublicProfile } from "@/lib/types";
+import type { DeckCard, Profile, PublicProfile } from "@/lib/types";
 
 // O bucket é privado. Quem chega aqui já passou pelas RPCs que decidem o que pode ser visto.
 export async function signPaths(paths: (string | null | undefined)[]) {
@@ -19,7 +20,10 @@ export async function signPaths(paths: (string | null | undefined)[]) {
   return urls;
 }
 
-export async function toDeckCards(profiles: PublicProfile[]): Promise<DeckCard[]> {
+export async function toDeckCards(
+  profiles: PublicProfile[],
+  viewer: Profile,
+): Promise<DeckCard[]> {
   const urls = await signPaths(profiles.flatMap((p) => [p.video_path, ...p.photo_paths]));
 
   return profiles.map((profile) => ({
@@ -30,5 +34,8 @@ export async function toDeckCards(profiles: PublicProfile[]): Promise<DeckCard[]
     isPro: profile.is_pro,
     videoUrl: profile.video_path ? (urls[profile.video_path] ?? null) : null,
     posterUrl: profile.photo_paths[0] ? (urls[profile.photo_paths[0]] ?? null) : null,
+    place: placeLabel(profile),
+    hobbies: tagHobbies(viewer.hobbies, profile.hobbies),
+    sameRegion: sameRegion(viewer, profile),
   }));
 }

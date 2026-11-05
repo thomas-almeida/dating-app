@@ -1,6 +1,15 @@
 "use client";
 
-import { BadgeCheck, ChevronRight, Heart, LoaderCircle, RefreshCw, Video, X } from "lucide-react";
+import {
+  BadgeCheck,
+  ChevronRight,
+  Heart,
+  LoaderCircle,
+  MapPin,
+  RefreshCw,
+  Video,
+  X,
+} from "lucide-react";
 import {
   animate,
   AnimatePresence,
@@ -19,10 +28,12 @@ import {
   useState,
   type Ref,
 } from "react";
+import { HobbyTags } from "@/components/hobby-tags";
 import { LoopVideo } from "@/components/loop-video";
 import { SIGNED_URL_TTL_SECONDS } from "@/lib/config";
 import type { DeckCard, SwipeAction } from "@/lib/types";
 import { loadMoreCards, recordSwipe } from "./actions";
+import { MatchOverlay, type MatchViewer } from "./match-overlay";
 
 type CardHandle = { swipe: (action: SwipeAction) => void };
 
@@ -140,11 +151,20 @@ function TopCard({
             {card.age && <span className="shrink-0 font-normal">{card.age}</span>}
             <BadgeCheck className="size-6 shrink-0 text-coral" aria-label="Perfil aprovado" />
           </h2>
-          {card.isPro && (
-            <span className="mt-1.5 inline-block rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white backdrop-blur">
-              Pro
-            </span>
+          {card.place && (
+            <p className="mt-0.5 flex items-center gap-1 text-sm text-white/80">
+              <MapPin className="size-3.5 shrink-0" aria-hidden />
+              <span className="truncate">{card.place}</span>
+            </p>
           )}
+          <div className="mt-1.5 flex flex-wrap gap-1.5 empty:hidden">
+            {card.isPro && (
+              <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white backdrop-blur">
+                Pro
+              </span>
+            )}
+            <HobbyTags hobbies={card.hobbies} sameRegion={card.sameRegion} />
+          </div>
           {card.bio && (
             <p className="mt-1.5 line-clamp-2 text-sm leading-snug text-white/80">{card.bio}</p>
           )}
@@ -155,8 +175,9 @@ function TopCard({
           aria-label={`Ver perfil de ${card.displayName}`}
           onPointerDown={(event) => event.stopPropagation()}
           draggable={false}
-          className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur transition hover:bg-white/25"
+          className="flex p-3 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white backdrop-blur transition hover:bg-white/25"
         >
+          <b>Ver</b>
           <ChevronRight className="size-5" aria-hidden />
         </Link>
       </div>
@@ -164,49 +185,9 @@ function TopCard({
   );
 }
 
-function MatchOverlay({ card, onClose }: { card: DeckCard; onClose: () => void }) {
-  return (
-    <motion.div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="match-title"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-ink/95 px-8 text-center backdrop-blur"
-    >
-      <div className="relative size-36 overflow-hidden rounded-full ring-4 ring-coral">
-        <CardPoster card={card} />
-      </div>
-      <h2 id="match-title" className="mt-6 font-display text-4xl font-semibold">
-        Deu match!
-      </h2>
-      <p className="mt-2 text-sm leading-relaxed text-muted">
-        Você e {card.displayName} se curtiram.
-      </p>
-      <div className="mt-8 w-full max-w-xs space-y-2">
-        <Link
-          href={`/perfil/${card.id}`}
-          className="flex h-13 items-center justify-center rounded-full bg-coral font-semibold text-ink"
-        >
-          Ver perfil
-        </Link>
-        <button
-          type="button"
-          autoFocus
-          onClick={onClose}
-          className="h-13 w-full rounded-full bg-surface font-semibold text-cream"
-        >
-          Continuar
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-export function Deck({ initialCards }: { initialCards: DeckCard[] }) {
+export function Deck({ initialCards, viewer }: { initialCards: DeckCard[]; viewer: MatchViewer }) {
   const [cards, setCards] = useState(initialCards);
-  const [match, setMatch] = useState<DeckCard | null>(null);
+  const [match, setMatch] = useState<{ card: DeckCard; whatsapp: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [refilling, setRefilling] = useState(false);
   const topCard = useRef<CardHandle>(null);
@@ -225,7 +206,7 @@ export function Deck({ initialCards }: { initialCards: DeckCard[] }) {
     try {
       const result = await recordSwipe(card.id, action);
       if (!result.ok) throw new Error("Swipe recusado");
-      if (result.match) setMatch(card);
+      if (result.match) setMatch({ card, whatsapp: result.whatsapp });
     } catch {
       setNotice("Não deu para salvar sua última escolha.");
     }
@@ -350,7 +331,14 @@ export function Deck({ initialCards }: { initialCards: DeckCard[] }) {
       </div>
 
       <AnimatePresence>
-        {match && <MatchOverlay card={match} onClose={() => setMatch(null)} />}
+        {match && (
+          <MatchOverlay
+            card={match.card}
+            whatsapp={match.whatsapp}
+            viewer={viewer}
+            onClose={() => setMatch(null)}
+          />
+        )}
       </AnimatePresence>
     </section>
   );

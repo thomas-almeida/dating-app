@@ -87,6 +87,16 @@ O manifest está em `app/manifest.ts` e o service worker em `public/sw.js`. Ele 
 
 A instalação exige HTTPS fora do `localhost`. Para testar no celular em desenvolvimento, use `next dev --experimental-https`.
 
+Ao chegar em `/inicio` pelo navegador do celular, a pessoa vê o guia de instalação (`components/install-prompt.tsx`), com o passo a passo do aparelho dela. Quem está no Chrome do Android instala em um toque. A detecção e o evento de instalação ficam em `lib/install.ts`. Depois de "Agora não", o guia volta a cada `INSTALL_REMINDER_DAYS` e em todo login. Ele não aparece no computador. Para ver no computador, use a emulação de celular do DevTools.
+
+Ao abrir o app instalado, ou ao instalar pelo Chrome, a conta recebe `profiles.app_installed_at` e o guia não aparece mais em nenhum navegador. A marca fica no banco porque, no iPhone, o Safari não enxerga o storage do app instalado.
+
+## Afinidade
+
+Bairro, cidade, estado e até 3 gostos (`{ "emoji": "🏖", "hobbie": "Praia" }`) ficam no perfil e aparecem para as outras pessoas. As regras estão em `lib/affinity.ts`: gosto em comum é ter um emoji igual, e mesma região é ter a mesma cidade e o mesmo estado. O card, o perfil e a tela de match mostram todos os gostos da pessoa, com os em comum em destaque, e avisam quando ela é da mesma região.
+
+Perfis criados antes da migration `0004` ficam sem esses dados até serem editados. `npm run seed:bots` atualiza os bots que já existem. Em `seed:demo`, rode com `--remove` e depois de novo.
+
 ## Antes de lançar
 
 - Remover os perfis de exemplo com `npm run seed:demo -- --remove` e `npm run seed:bots -- --remove`. Para quem usa o app, eles parecem pessoas reais.
