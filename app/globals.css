@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-ink: #0d0a0b;
+  --color-surface: #171213;
+  --color-raised: #231c1d;
+  --color-line: #33292a;
+  --color-cream: #f6efe9;
+  --color-muted: #a3958f;
+  --color-coral: #ff5a6e;
+  --color-coral-deep: #d93a52;
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-manrope);
+  --animate-story-progress: story-progress 5s linear forwards;
+  --animate-brand-gradient: brand-gradient 10s ease infinite;
+  --animate-blob: blob-drift var(--blob-time, 14s) ease-in-out var(--blob-delay, 0s) infinite;
+  --animate-bubble: bubble-rise var(--bubble-time, 14s) linear var(--bubble-delay, 0s) infinite;
+
+  @keyframes story-progress {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes brand-gradient {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  @keyframes blob-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    33% {
+      transform: translate3d(var(--blob-x), var(--blob-y), 0) scale(1.25);
+    }
+    66% {
+      transform: translate3d(calc(var(--blob-x) * -0.5), calc(var(--blob-y) * 0.7), 0) scale(0.85);
+    }
+  }
+
+  @keyframes bubble-rise {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, 0, 0) scale(0.8);
+    }
+    10%,
+    85% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--bubble-sway), -125vh, 0) scale(1.15);
+    }
+  }
+}
+
+html {
+  background: var(--color-ink);
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-cream);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  /* Abaixo de 16px o Safari do iOS dá zoom ao focar o campo. */
+  font-size: 16px;
+}
+
+/* Na camada base, para o focus:outline-none dos campos conseguir vencer. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-coral);
+    outline-offset: 2px;
+  }
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

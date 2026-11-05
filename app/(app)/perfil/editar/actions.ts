@@ -1,0 +1,105 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { MAX_PHOTOS, MEDIA_BUCKET } from "@/lib/config";
+import { requireUser } from "@/lib/dal";
+import { normalizePhone } from "@/lib/phone";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import type { FormState } from "@/lib/types";
+
+const schema = z.object({
+  name: z.string().trim().min(1, "Conte como você se chama.").max(80, "Nome muito longo."),
+  nickname: z.string().trim().min(1, "Escolha um apelido.").max(40, "Apelido muito longo."),
+  bio: z.string().trim().min(1, "Escreva uma bio.").max(500, "Bio muito longa."),
+  gender: z.enum(["male", "female"], { error: "Selecione uma opção em “Você é”." }),
+  birthDate: z.iso.date({ error: "Informe sua data de nascimento." }),
+  whatsapp: z.string(),
+  videoPath: z.string().min(1).nullable(),
+  photoPaths: z.array(z.string().min(1)).max(MAX_PHOTOS, `Escolha até ${MAX_PHOTOS} fotos.`),
+});
+
+// O gatilho profiles_guard devolve estes códigos em error.message.
+const GUARD_ERRORS: Record<string, string> = {
+  underage: "O app é só para maiores de 18 anos.",
+  too_many_photos: `Escolha até ${MAX_PHOTOS} fotos.`,
+  foreign_media: "Não reconhecemos um dos arquivos. Envie de novo.",
+};
+
+const FAILED: FormState = { status: "error", message: "Não deu para salvar. Tente de novo." };
+
+export async function saveProfile(_: FormState, formData: FormData): Promise<FormState> {
+  const { user, profile } = await requireUser();
+
+  const parsed = schema.safeParse({
+    name: formData.get("name"),
+    nickname: formData.get("nickname"),
+    bio: formData.get("bio"),
+    gender: formData.get("gender"),
+    birthDate: formData.get("birth_date"),
+    whatsapp: formData.get("whatsapp"),
+    videoPath: formData.get("video_path"),
+    photoPaths: formData.getAll("photo_paths"),
+  });
+
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? FAILED.message };
+  }
+
+  const { name, nickname, bio, gender, birthDate, videoPath, photoPaths } = parsed.data;
+
+  const whatsapp = normalizePhone(parsed.data.whatsapp);
+  if (!whatsapp) return { status: "error", message: "Confira o WhatsApp: use DDD e número." };
+
+  if (!videoPath && photoPaths.length === 0) {
+    return { status: "error", message: "Coloque um vídeo ou pelo menos uma foto." };
+  }
+
+  const supabase = await createClient();
+
+  // O contato vem primeiro: o perfil completo já fica visível para os outros.
+  // Upsert com service role porque a conta de admin nasce sem contato e ninguém tem grant de insert.
+  const { error: contactError } = await createAdminClient()
+    .from("profile_contacts")
+    .upsert({ user_id: user.id, whatsapp });
+
+  if (contactError) {
+    console.error("saveProfile contact", contactError);
+    return FAILED;
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      name,
+      nickname,
+      bio,
+      gender,
+      birth_date: birthDate,
+      video_path: videoPath,
+      photo_paths: photoPaths,
+    })
+    .eq("id", user.id);
+
+  if (error) {
+    const message = GUARD_ERRORS[error.message];
+    if (message) return { status: "error", message };
+    console.error("saveProfile", error);
+    return FAILED;
+  }
+
+  const kept = new Set([videoPath, ...photoPaths]);
+  const removed = [profile.video_path, ...profile.photo_paths].flatMap((path) =>
+    path && !kept.has(path) ? [path] : [],
+  );
+
+  if (removed.length > 0) {
+    const { error: removeError } = await supabase.storage.from(MEDIA_BUCKET).remove(removed);
+    if (removeError) console.error("saveProfile remove", removeError);
+  }
+
+  revalidatePath("/", "layout");
+  redirect(profile.onboarded_at ? "/perfil" : "/inicio");
+}
