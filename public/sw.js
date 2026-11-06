@@ -1,5 +1,5 @@
 // Trocar a versão apaga o cache antigo no próximo activate.
-const CACHE = "static-v1";
+const CACHE = "static-v2";
 const OFFLINE_URL = "/offline";
 
 async function precacheOffline() {
@@ -14,7 +14,8 @@ async function precacheOffline() {
 }
 
 async function cacheFirst(request) {
-  const cached = await caches.match(request);
+  // O nome do arquivo já traz o hash. Sem ignorar o ?dpl=, cada deploy baixaria tudo de novo.
+  const cached = await caches.match(request, { ignoreSearch: true });
   if (cached) return cached;
 
   const response = await fetch(request);

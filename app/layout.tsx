@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 import { SwRegister } from "@/components/sw-register";
+import { UpdatePrompt } from "@/components/update-prompt";
 import { APP_DESCRIPTION, APP_NAME, THEME_COLOR } from "@/lib/config";
 import "./globals.css";
 
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-dvh flex-col">
         {children}
         <SwRegister />
+        <UpdatePrompt />
       </body>
     </html>
   );

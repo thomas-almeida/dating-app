@@ -60,6 +60,9 @@ export function churchLabel(value: string | null) {
   return CHURCHES.find((church) => church.value === value)?.label ?? null;
 }
 
+// De quanto em quanto tempo o app aberto procura uma versão nova.
+export const UPDATE_CHECK_MS = 5 * 60 * 1000;
+
 export const CHAT_POLL_MS = 3000;
 export const MAX_MESSAGE_LENGTH = 1000;
 

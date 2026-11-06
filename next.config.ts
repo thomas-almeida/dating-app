@@ -1,8 +1,15 @@
 import type { NextConfig } from "next";
 
+// Muda a cada deploy. Com isso, quem navega numa versão antiga recarrega a página inteira.
+const deploymentId =
+  process.env.VERCEL_DEPLOYMENT_ID ??
+  process.env.VERCEL_GIT_COMMIT_SHA ??
+  process.env.E2E_DEPLOYMENT_ID;
+
 const nextConfig: NextConfig = {
   // A regressão usa um build próprio, apontado para o backend falso.
   ...(process.env.E2E_DIST_DIR ? { distDir: process.env.E2E_DIST_DIR } : {}),
+  ...(deploymentId ? { deploymentId, env: { NEXT_PUBLIC_DEPLOYMENT_ID: deploymentId } } : {}),
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
