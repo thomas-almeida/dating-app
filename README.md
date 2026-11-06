@@ -89,6 +89,14 @@ O manifest está em `app/manifest.ts` e o service worker em `public/sw.js`. Ele 
 
 A instalação exige HTTPS fora do `localhost`. Para testar no celular em desenvolvimento, use `next dev --experimental-https`.
 
+Um PWA reaberto da memória do celular continua com o JavaScript antigo, e as Server Actions dele somem no deploy seguinte. Para isso não acontecer, cada deploy tem uma versão (`deploymentId`, em `next.config.ts`):
+
+- Ao navegar, o próprio Next percebe a diferença e recarrega a página inteira.
+- Ao voltar para o app, `components/update-prompt.tsx` compara a versão com `/api/version`. Sem formulário na tela, recarrega sozinho, uma vez por versão. Com formulário, mostra o aviso, para não apagar o que a pessoa digitou.
+- Com o app aberto, a checagem roda a cada `UPDATE_CHECK_MS` e só mostra o aviso.
+
+A versão vem de `VERCEL_DEPLOYMENT_ID`, com `VERCEL_GIT_COMMIT_SHA` como alternativa. Mantenha ligada a opção "Automatically expose System Environment Variables" na Vercel. Em `next dev`, sem essas variáveis, nada disso roda.
+
 Ao chegar em `/inicio` pelo navegador do celular, a pessoa vê o guia de instalação (`components/install-prompt.tsx`), com o passo a passo do aparelho dela. Quem está no Chrome do Android instala em um toque. A detecção e o evento de instalação ficam em `lib/install.ts`. Depois de "Agora não", o guia volta a cada `INSTALL_REMINDER_DAYS` e em todo login. Ele não aparece no computador. Para ver no computador, use a emulação de celular do DevTools.
 
 Ao abrir o app instalado, ou ao instalar pelo Chrome, a conta recebe `profiles.app_installed_at` e o guia não aparece mais em nenhum navegador. A marca fica no banco porque, no iPhone, o Safari não enxerga o storage do app instalado.
