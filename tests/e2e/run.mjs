@@ -63,6 +63,7 @@ async function main() {
     ...process.env,
     ...fakeEnv,
     E2E_DIST_DIR: ".next-e2e",
+    E2E_DEPLOYMENT_ID: "e2e",
     E2E_APP_URL: APP_URL,
     E2E_BACKEND_URL: BACKEND_URL,
   };

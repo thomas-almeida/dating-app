@@ -1107,6 +1107,61 @@ for (const { context } of Object.values(members)) await context.close();
   await sql(`delete from push_subscriptions where endpoint like '%/e2e'`);
   await notifying.close();
 
+  // ---- versão nova
+  const deployed = await (await fetch(`${APP}/api/version`)).json();
+  check("servidor informa a versão do deploy", deployed.version === "e2e", deployed);
+
+  // Sem o service worker, o Playwright enxerga o pedido e consegue simular um deploy novo.
+  const updating = await browser.newContext({ ...mobile, reducedMotion: "reduce", serviceWorkers: "block" });
+  const updatePage = await updating.newPage();
+  await updatePage.goto(`${APP}/entrar`);
+  await logIn(updatePage);
+  await updatePage.waitForLoadState("networkidle");
+  // O Next tira o atributo ao iniciar, para não atrapalhar a hidratação: só o HTML cru tem.
+  check("página traz a versão do deploy", (await (await fetch(`${APP}/entrar`)).text()).includes('data-dpl-id="e2e"'));
+
+  const updateButton = updatePage.getByRole("button", { name: "Atualizar" });
+  const markPage = () => updatePage.evaluate(() => { window.samePage = true; });
+  const pageKept = () => updatePage.evaluate(() => window.samePage === true);
+  const returnToApp = () => updatePage.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+
+  await markPage();
+  await returnToApp();
+  await updatePage.waitForTimeout(500);
+  check("sem deploy novo, nada acontece", (await pageKept()) && !(await updateButton.isVisible()));
+
+  await updatePage.route("**/api/version", (route) => route.fulfill({ json: { version: "deploy-novo" } }));
+  await returnToApp();
+  await updatePage.waitForFunction(() => window.samePage !== true);
+  check("ao voltar para o app, a versão nova entra sozinha", true);
+
+  await updatePage.waitForLoadState("networkidle");
+  await markPage();
+  await returnToApp();
+  await updateButton.waitFor();
+  await shot(updatePage, "44-versao-nova");
+  check("não recarrega em loop e passa a avisar", await pageKept());
+
+  await updatePage.evaluate(() => sessionStorage.clear());
+  await updatePage.goto(`${APP}/perfil/editar`);
+  await updatePage.getByLabel("Bio").waitFor();
+  // Digitar antes da hidratação perde o texto, e o teste culparia a atualização.
+  await updatePage.waitForLoadState("networkidle");
+  await updatePage.getByLabel("Bio").fill("Rascunho que não pode sumir");
+  await markPage();
+  await returnToApp();
+  await updateButton.waitFor();
+  const draft = { kept: await pageKept(), bio: await updatePage.getByLabel("Bio").inputValue() };
+  check(
+    "com formulário na tela, só avisa e mantém o que foi digitado",
+    draft.kept && draft.bio === "Rascunho que não pode sumir",
+    draft,
+  );
+  await updateButton.click();
+  await updatePage.waitForFunction(() => window.samePage !== true);
+  check("o botão aplica a versão nova", true);
+  await updating.close();
+
   const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: "pt-BR" });
   const site = await desktop.newPage();
   watch(site, "desktop");
