@@ -14,7 +14,9 @@ Stack: Next.js 16, TypeScript, Tailwind 4, Supabase e AbacatePay.
 4. Ela preenche o perfil (`/perfil/editar`). A home só abre com o perfil completo.
 5. Na home (`/inicio`), curte ou passa nos cards. Curtida dos dois lados vira match (`/matches`). Quem já passou volta depois de quem ainda não foi visto.
 6. Qualquer pessoa posta story: 1 a cada 24 horas no plano free, sem limite no Pro. O dono vê quem viu e quem curtiu.
-7. Ver e curtir stories de outras pessoas, o botão de WhatsApp, as métricas do perfil e a lista de quem curtiu (`/curtidas`) são do Pro (`/pro`).
+7. Quem deu match conversa pelo chat do app (`/conversas/[id]`), sem precisar do Pro.
+8. Ver e curtir stories de outras pessoas, o botão de WhatsApp, as métricas do perfil e a lista de quem curtiu (`/curtidas`) são do Pro (`/pro`).
+9. Em `/eventos`, qualquer pessoa cria eventos e confirma presença nos eventos dos outros.
 
 ## Rodando localmente
 
@@ -60,8 +62,8 @@ O app abre em <http://localhost:3000> e o admin entra por `/entrar`.
 
 Rode `npm test` a cada mudança e `npm run test:e2e` antes de publicar. Toda correção de bug deve entrar com um teste que falharia sem ela.
 
-- **Banco** (`scripts/test-migration.ts`): limite de stories, quem vê o quê, métricas do Pro e acesso direto às tabelas.
-- **Ponta a ponta** (`tests/e2e/regression.mjs`): do cadastro na LP ao cancelamento do Pro, passando por stories, métricas e PWA.
+- **Banco** (`scripts/test-migration.ts`): limite de stories, quem vê o quê, métricas do Pro, preferências, chat, eventos e acesso direto às tabelas.
+- **Ponta a ponta** (`tests/e2e/regression.mjs`): do cadastro na LP ao cancelamento do Pro, passando por stories, métricas, chat, eventos e PWA.
 
 A regressão precisa do Google Chrome instalado. Ela usa as migrations reais num Postgres em memória, com Supabase e AbacatePay simulados em `tests/e2e/fake-backend.mjs`, e gera o build em `.next-e2e`. Nada toca os serviços de verdade. As capturas de tela ficam em `tests/e2e/.output/shots`.
 
@@ -97,11 +99,35 @@ Bairro, cidade, estado e até 3 gostos (`{ "emoji": "🏖", "hobbie": "Praia" }`
 
 Perfis criados antes da migration `0004` ficam sem esses dados até serem editados. `npm run seed:bots` atualiza os bots que já existem. Em `seed:demo`, rode com `--remove` e depois de novo.
 
+Altura, igreja e cor da pele são opcionais. A igreja aparece no card, e quem é da mesma igreja vem primeiro no deck. A cor da pele nunca sai das RPCs: ela só decide em quais filtros a pessoa entra. As opções ficam em `lib/config.ts`.
+
+Em `/perfil/editar`, a pessoa escolhe quem quer ver por sexo, igreja e cor da pele. Lista vazia significa sem filtro, e em sexo mantém o padrão: o sexo oposto. A regra de sexo vale nos dois sentidos (`can_pair`): duas pessoas só se veem se cada uma quiser ver o sexo da outra. Quem não informou igreja ou cor fica de fora de quem filtrou por elas.
+
+## Chat e notificações
+
+O chat é só entre quem deu match, e desfazer o match fecha a conversa. As tabelas não têm grant para os clientes: tudo passa pelas funções da migration `0007`, que conferem o match a cada chamada.
+
+Com a conversa aberta, o navegador consulta o Supabase a cada `CHAT_POLL_MS`, direto e sem passar pelo servidor do app. Uma mensagem conta como visualizada quando a conversa está aberta e visível.
+
+As notificações usam Web Push e dependem da autorização da pessoa, pedida em `/matches`. No iPhone, só funcionam com o app instalado na tela inicial. O texto da mensagem não vai na notificação, porque ela aparece na tela bloqueada.
+
+Para ligar, gere as chaves e coloque nas variáveis `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT`, inclusive na Vercel:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Sem elas, o app funciona normalmente e não oferece as notificações. Trocar as chaves invalida os aparelhos já inscritos.
+
+## Eventos
+
+Só quem criou edita e exclui, e essa pessoa já entra como confirmada. As fotos ficam na pasta dela no Storage e saem junto quando são removidas. A data é sempre lida e mostrada em horário de Brasília (`lib/event-date.ts`). A lista mostra os próximos eventos e os do último dia, e um evento que já começou não aceita novas confirmações.
+
 ## Antes de lançar
 
 - Remover os perfis de exemplo com `npm run seed:demo -- --remove` e `npm run seed:bots -- --remove`. Para quem usa o app, eles parecem pessoas reais.
 - Apagar `public/bot`: tudo que fica em `public` é servido publicamente.
-- Publicar política de privacidade e termos. Crença religiosa é dado sensível na LGPD.
-- Criar denúncia e bloqueio de perfis.
+- Publicar política de privacidade e termos. Crença religiosa e cor da pele são dados sensíveis na LGPD, e o tratamento pede consentimento específico.
+- Criar denúncia e bloqueio de perfis, de mensagens e de eventos.
 - Criar recuperação de senha por e-mail.
 - Colocar limite de tentativas na LP e no login, que hoje têm só um honeypot na LP.
