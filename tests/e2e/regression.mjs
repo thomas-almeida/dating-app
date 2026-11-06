@@ -1,5 +1,6 @@
 // Regressão de ponta a ponta. Rode com `npm run test:e2e`, que sobe tudo isto antes.
 import { execSync } from "node:child_process";
+import { createECDH, randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -202,6 +203,9 @@ await user.getByLabel("Data de nascimento").fill("2015-01-01");
 await user.getByLabel("Estado").selectOption("SP");
 await user.getByLabel("Cidade").fill("São Paulo");
 await user.getByLabel("Bairro").fill("Vila Mariana");
+await user.getByLabel("Altura (cm)").fill("178");
+await user.locator('select[name="church"]').selectOption("batista");
+await user.locator('select[name="skin_color"]').selectOption("parda");
 await user.getByRole("button", { name: "Praia", exact: true }).click();
 await user.getByRole("button", { name: "Café", exact: true }).click();
 await user.getByLabel("Emoji do gosto").fill("ab");
@@ -229,16 +233,21 @@ await user.getByRole("button", { name: "Concluir perfil" }).click();
 await user.waitForURL("**/inicio");
 check("perfil completo libera a home", user.url().endsWith("/inicio"));
 
-const savedProfile = (await sql(`select state, city, neighborhood, hobbies from profiles where id='${userId}'`))[0];
+const savedProfile = (await sql(`select state, city, neighborhood, hobbies, height_cm, church, skin_color from profiles where id='${userId}'`))[0];
 check(
   "localização e gostos são salvos",
   savedProfile.state === "SP" && savedProfile.city === "São Paulo" && savedProfile.neighborhood === "Vila Mariana" && savedProfile.hobbies.length === 3,
   savedProfile,
 );
+check(
+  "altura, igreja e cor são salvas",
+  savedProfile.height_cm === 178 && savedProfile.church === "batista" && savedProfile.skin_color === "parda",
+  savedProfile,
+);
 
 // Sem o U+FE0F e com a cidade em outra grafia: o que o usuário escolheu precisa casar mesmo assim.
 // Vem antes do seed: o execSync trava o Node, e o fetch seguinte pegaria uma conexão já fechada.
-await sql(`update profiles set state='SP', city='sao  paulo', hobbies='[{"emoji":"\u{1F3D6}","hobbie":"Praia"},{"emoji":"🎯","hobbie":"Dardos"}]' where gender='female'`);
+await sql(`update profiles set state='SP', city='sao  paulo', church='batista', hobbies='[{"emoji":"\u{1F3D6}","hobbie":"Praia"},{"emoji":"🎯","hobbie":"Dardos"}]' where gender='female'`);
 
 // Metade dos perfis de exemplo curte o usuário novo.
 execSync("npx tsx scripts/seed-demo.ts", { cwd: projectRoot, env: process.env, stdio: "pipe" });
@@ -251,12 +260,9 @@ await shot(user, "09-home");
 const cardCommonMark = user.getByRole("article").getByText("em comum");
 const cardOtherHobby = user.getByRole("article").getByText("Dardos");
 check("card mostra todos os gostos", await cardOtherHobby.isVisible());
-check(
-  "card destaca só o gosto em comum",
-  (await cardCommonMark.count()) === 1 &&
-    (await cardCommonMark.evaluate((mark) => mark.parentElement.className)).includes("bg-coral") &&
-    !(await cardOtherHobby.evaluate((tag) => tag.className)).includes("bg-coral"),
-);
+const commonTags = await cardCommonMark.evaluateAll((marks) => marks.map((mark) => mark.parentElement.textContent));
+check("card destaca a igreja e o gosto em comum", commonTags.length === 2 && commonTags.some((tag) => tag.includes("Batista")) && commonTags.some((tag) => tag.includes("Praia")), commonTags);
+check("gosto diferente fica sem destaque", !(await cardOtherHobby.evaluate((tag) => tag.className)).includes("bg-coral"));
 check("card mostra a mesma região", await user.getByRole("article").getByText("Da sua região").isVisible());
 const cardPlace = await user.getByRole("article").getByText(/, sao\s+paulo - SP$/).textContent();
 check("card mostra bairro, cidade e estado", cardPlace.split(",")[0].length > 0, cardPlace);
@@ -307,7 +313,8 @@ async function dismissMatch() {
   if (matches === 1) {
     await user.waitForTimeout(1400);
     await shot(user, "12-match");
-    check("match mostra o que há em comum", (await overlay.getByText("em comum").count()) === 1);
+    check("match mostra o que há em comum", (await overlay.getByText("em comum").count()) === 2);
+    check("match leva para a conversa", (await overlay.getByRole("link", { name: "Abrir conversa" }).getAttribute("href")).startsWith("/conversas/"));
     // O coração pulsa sem parar, e o Playwright só clica sozinho no que está parado.
     await overlay.getByRole("button", { name: "Soltar corações" }).click({ force: true });
     await user.waitForTimeout(300);
@@ -354,11 +361,17 @@ check("rever pessoas não duplica os swipes", swipes[0].n === 4, swipes);
 await user.getByRole("link", { name: "Matches" }).click();
 await user.waitForURL("**/matches");
 await user.getByRole("heading", { name: "Matches" }).waitFor();
-await user.locator('a[href^="/perfil/"]').first().waitFor();
+await user.locator('main a[href^="/conversas/"]').first().waitFor();
 await shot(user, "14-matches");
 
-await user.locator('main a[href^="/perfil/"]').first().click();
+await user.locator('main a[href^="/conversas/"]').first().click();
+await user.waitForURL(/\/conversas\/[0-9a-f-]{36}$/);
+await user.getByText(/Diga oi para/).waitFor();
+check("conversa nova convida a dizer oi", true);
+await user.getByRole("link", { name: /^Ver perfil de/ }).click();
 await user.waitForURL(/\/perfil\/[0-9a-f-]{36}$/);
+await user.getByRole("link", { name: "Abrir conversa" }).waitFor();
+check("perfil de quem deu match leva para a conversa", true);
 await user.getByRole("button", { name: "Mandar mensagem no WhatsApp" }).waitFor();
 await shot(user, "15-perfil-outro");
 
@@ -402,7 +415,10 @@ const row = await sql(`select status, subscription_id, customer_id from subscrip
 check("assinatura guarda subs_ e cliente", row[0]?.status === "active" && row[0]?.subscription_id?.startsWith("subs_") && row[0]?.customer_id === "cust_fake", row);
 
 await user.goto(`${APP}/matches`);
-await user.locator('main a[href^="/perfil/"]').first().click();
+await user.waitForLoadState("networkidle");
+await user.locator('main a[href^="/conversas/"]').first().click();
+await user.waitForURL(/\/conversas\/[0-9a-f-]{36}$/);
+await user.getByRole("link", { name: /^Ver perfil de/ }).click();
 await user.waitForURL(/\/perfil\/[0-9a-f-]{36}$/);
 const whatsapp = user.getByRole("link", { name: "Mandar mensagem no WhatsApp" });
 await whatsapp.waitFor();
@@ -794,6 +810,145 @@ await proMatch.waitFor({ state: "hidden" });
 
 await sql(`update profiles set is_pro = false where id='${userId}'`);
 
+// ---- chat
+{
+  const biaId = members.bia.id;
+  await sql(`insert into swipes (swiper_id, target_id, action) values ('${userId}', '${biaId}', 'like'), ('${biaId}', '${userId}', 'like')
+    on conflict (swiper_id, target_id) do update set action = 'like'`);
+
+  // Chaves de verdade: sem elas, a mensagem não é cifrada e nada sai para o serviço de push.
+  const device = createECDH("prime256v1");
+  device.generateKeys();
+  await sql(`insert into push_subscriptions (endpoint, user_id, p256dh, auth) values
+    ('${BACKEND}/__push/bia', '${biaId}', '${device.getPublicKey("base64url")}', '${randomBytes(16).toString("base64url")}')`);
+
+  await user.goto(`${APP}/conversas/${biaId}`);
+  await user.waitForLoadState("networkidle");
+  await user.getByLabel("Mensagem").fill("Oi, Bia! Tudo bem?");
+  await user.getByRole("button", { name: "Enviar" }).click();
+  await user.getByText("Oi, Bia! Tudo bem?").waitFor();
+  check("quem manda vê a mensagem", true);
+  await user.getByRole("img", { name: "Enviada" }).waitFor();
+  check("mensagem começa como enviada", true);
+
+  let pushes = [];
+  for (let attempt = 0; attempt < 40 && pushes.length === 0; attempt += 1) {
+    pushes = await (await fetch(`${BACKEND}/__pushes`)).json();
+    if (pushes.length === 0) await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  check("mensagem dispara a notificação cifrada", pushes.length === 1 && pushes[0].encoding === "aes128gcm" && pushes[0].scheme === "vapid" && pushes[0].bytes > 0, pushes);
+
+  await bia.goto(`${APP}/matches`);
+  await bia.getByLabel("1 não lidas").waitFor();
+  check("lista mostra a mensagem não lida", await bia.getByText("Oi, Bia! Tudo bem?").isVisible());
+  check("menu avisa que há mensagem nova", (await bia.getByLabel("1 mensagens não lidas").count()) === 1);
+  await bia.waitForLoadState("networkidle");
+  await bia.locator(`main a[href="/conversas/${userId}"]`).click();
+  await bia.getByRole("list", { name: "Mensagens" }).getByText("Oi, Bia! Tudo bem?").waitFor();
+  check("quem recebe lê a mensagem", true);
+
+  await user.getByRole("img", { name: "Visualizada" }).waitFor({ timeout: 10000 });
+  await shot(user, "40-chat");
+  check("quem manda vê que foi visualizada", true);
+
+  await bia.getByLabel("Mensagem", { exact: true }).fill("Tudo ótimo!");
+  await bia.getByRole("button", { name: "Enviar" }).click();
+  await user.getByRole("list", { name: "Mensagens" }).getByText("Tudo ótimo!").waitFor({ timeout: 10000 });
+  check("resposta chega sem recarregar a página", true);
+
+  const { page: outsider } = members.lia;
+  await outsider.goto(`${APP}/conversas/${userId}`);
+  await outsider.getByText("Não encontramos essa página").waitFor();
+  check("sem match não abre a conversa", true);
+}
+
+// ---- eventos
+{
+  await user.goto(`${APP}/eventos`);
+  await user.getByRole("heading", { name: "Eventos" }).waitFor();
+  await user.waitForLoadState("networkidle");
+  await user.getByRole("link", { name: "Criar" }).click();
+  await user.waitForURL("**/eventos/novo");
+  await user.getByLabel("Nome do evento").waitFor();
+  check("evento já sugere quem organiza", (await user.getByLabel("Organizado por").inputValue()) === "Jotinha");
+
+  await user.locator('input[accept="image/*"]').first().setInputFiles(photoPath);
+  await user.locator('input[name="photo_paths"]').waitFor({ state: "attached" });
+  await user.getByLabel("Nome do evento").fill("Retiro de jovens");
+  await user.getByLabel("Descrição").fill("Dois dias de louvor, conversa e fogueira.");
+  await user.getByLabel("Local").fill("Sítio Betel, Atibaia");
+  await user.getByLabel("Data e hora").fill("2020-05-10T19:30");
+  await user.getByRole("button", { name: "Criar evento" }).click();
+  await user.getByText("Escolha uma data no futuro.").waitFor();
+  check("evento no passado é recusado", (await user.getByLabel("Nome do evento").inputValue()) === "Retiro de jovens");
+
+  await user.getByLabel("Data e hora").fill("2040-05-10T19:30");
+  await user.getByRole("button", { name: "Criar evento" }).click();
+  await user.waitForURL(/\/eventos\/[0-9a-f-]{36}$/);
+  await user.getByRole("heading", { name: "Retiro de jovens" }).waitFor();
+  const eventId = user.url().split("/").pop();
+  check("quem cria já aparece confirmado", await user.getByRole("heading", { name: "1 confirmado" }).isVisible());
+  check("evento mostra o horário de Brasília", await user.getByText(/19:30/).isVisible());
+  await user.waitForTimeout(400);
+  await shot(user, "41-evento");
+
+  await bia.goto(`${APP}/eventos`);
+  await bia.getByText("Retiro de jovens").waitFor();
+  await shot(bia, "42-eventos");
+  check("todo mundo vê o evento", true);
+  await bia.goto(`${APP}/eventos/${eventId}`);
+  await bia.waitForLoadState("networkidle");
+  check("só quem criou vê o botão de editar", (await bia.getByRole("link", { name: "Editar" }).count()) === 0);
+  await bia.getByRole("button", { name: "Confirmar presença" }).click();
+  await bia.getByRole("heading", { name: "2 confirmados" }).waitFor();
+  await bia.getByRole("button", { name: "Cancelar presença" }).waitFor();
+  check("confirmar presença atualiza a lista", await bia.getByRole("link", { name: "Bia" }).isVisible());
+  await bia.goto(`${APP}/eventos/${eventId}/editar`);
+  await bia.getByText("Não encontramos essa página").waitFor();
+  check("quem não criou não abre a edição", true);
+
+  await user.goto(`${APP}/eventos/${eventId}/editar`);
+  await user.getByLabel("Nome do evento").waitFor();
+  check("edição mantém o horário", (await user.getByLabel("Data e hora").inputValue()) === "2040-05-10T19:30");
+  await user.getByLabel("Nome do evento").fill("Retiro de primavera");
+  await user.getByRole("button", { name: "Salvar evento" }).click();
+  await user.waitForURL(new RegExp(`/eventos/${eventId}$`));
+  await user.getByRole("heading", { name: "Retiro de primavera" }).waitFor();
+  check("dono edita o evento", true);
+
+  const eventFile = (await sql(`select photo_paths[1] as path from events where id='${eventId}'`))[0].path;
+  await user.waitForLoadState("networkidle");
+  await user.getByRole("button", { name: "Excluir" }).click();
+  await user.getByRole("button", { name: "Excluir de vez" }).click();
+  await user.waitForURL("**/eventos");
+  await user.getByRole("heading", { name: "Eventos" }).waitFor();
+  check("dono exclui o evento", (await countRows(`events where id='${eventId}'`)) === 0);
+  const filesLeft = await (await fetch(`${BACKEND}/__files`)).json();
+  check("foto do evento sai do Storage", !filesLeft.some((key) => key.endsWith(eventFile)), eventFile);
+}
+
+// ---- preferências
+{
+  await sql(`update profiles set church = 'catolica' where nickname = 'Aninha'`);
+  await sql(`delete from swipes where swiper_id = '${userId}'`);
+  await user.goto(`${APP}/perfil/editar`);
+  await user.getByRole("group", { name: "Igreja que você quer ver" }).getByRole("button", { name: "Católica" }).click();
+  await user.getByRole("group", { name: "Cor da pele que você quer ver" }).getByRole("button", { name: "Parda" }).click();
+  await user.getByRole("heading", { name: "Quem você quer ver" }).scrollIntoViewIfNeeded();
+  await shot(user, "43-preferencias");
+  await user.getByRole("button", { name: "Salvar" }).click();
+  await user.waitForURL(/\/perfil\/[0-9a-f-]{36}$/);
+  const prefs = (await sql(`select pref_churches, pref_skin_colors from profiles where id='${userId}'`))[0];
+  check("preferências são salvas", prefs.pref_churches.join() === "catolica" && prefs.pref_skin_colors.join() === "parda", prefs);
+
+  await sql(`update profiles set skin_color = 'parda' where nickname = 'Aninha'`);
+  await user.goto(`${APP}/inicio`);
+  await user.getByRole("article").waitFor();
+  check("deck mostra só quem combina", (await user.getByRole("article").getAttribute("aria-label")).startsWith("Aninha"));
+
+  await sql(`update profiles set pref_churches = '{}', pref_skin_colors = '{}' where id='${userId}'`);
+}
+
 for (const { context } of Object.values(members)) await context.close();
 
 // ---- outras telas
@@ -927,6 +1082,30 @@ for (const { context } of Object.values(members)) await context.close();
   await droidGuide.waitFor({ state: "hidden" });
   check("instalar no Android marca a conta na hora", await accountMarked());
   await android.close();
+
+  // O Chrome de teste não fala com o serviço de push: a inscrição é a única parte simulada.
+  const notifying = await browser.newContext({ ...mobile, reducedMotion: "reduce" });
+  await notifying.addInitScript(() => {
+    Object.defineProperty(Notification, "permission", { get: () => "default" });
+    Notification.requestPermission = async () => "granted";
+    PushManager.prototype.getSubscription = async () => null;
+    PushManager.prototype.subscribe = async () => ({
+      toJSON: () => ({
+        endpoint: "https://fcm.googleapis.com/fcm/send/e2e",
+        keys: { p256dh: "chave-publica", auth: "segredo" },
+      }),
+    });
+  });
+  const pushPage = await notifying.newPage();
+  await pushPage.goto(`${APP}/entrar`);
+  await logIn(pushPage);
+  await pushPage.evaluate(() => navigator.serviceWorker.ready);
+  await pushPage.goto(`${APP}/matches`);
+  await pushPage.getByRole("button", { name: "Ativar" }).click();
+  await pushPage.getByRole("button", { name: "Ativar" }).waitFor({ state: "hidden" });
+  check("autorizar notificações guarda o aparelho", (await sql(`select user_id from push_subscriptions where endpoint like '%/e2e'`))[0]?.user_id === userId);
+  await sql(`delete from push_subscriptions where endpoint like '%/e2e'`);
+  await notifying.close();
 
   const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: "pt-BR" });
   const site = await desktop.newPage();

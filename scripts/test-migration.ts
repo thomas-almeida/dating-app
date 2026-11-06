@@ -111,6 +111,159 @@ async function setup() {
   );
 }
 
+async function testCompatibility() {
+  const deckOf = async (uid: string) =>
+    (await as<{ id: string }>(uid, "select id from public.discover_profiles()")).map(({ id }) => id);
+  const clearPrefs = () =>
+    db.query("update public.profiles set pref_genders = '{}', pref_churches = '{}', pref_skin_colors = '{}'");
+
+  const usual = await deckOf(ids.ana);
+  check("sem preferência continua o sexo oposto", usual.length === 2 && usual.includes(ids.bruno) && usual.includes(ids.carlos), usual);
+
+  // Igreja
+  await db.query("update public.profiles set church = 'batista' where id = $1", [ids.bruno]);
+  await db.query("update public.profiles set church = 'catolica' where id = $1", [ids.carlos]);
+  await as(ids.ana, "update public.profiles set pref_churches = array['batista'] where id = $1", [ids.ana]);
+  const sameChurchOnly = await deckOf(ids.ana);
+  check("preferência de igreja filtra o deck", sameChurchOnly.length === 1 && sameChurchOnly[0] === ids.bruno, sameChurchOnly);
+  await clearPrefs();
+
+  await as(ids.ana, "update public.profiles set church = 'catolica' where id = $1", [ids.ana]);
+  const churchFirst = await deckOf(ids.ana);
+  check("mesma igreja vem primeiro", churchFirst[0] === ids.carlos, churchFirst);
+
+  // Cor da pele
+  await db.query("update public.profiles set skin_color = 'parda' where id = $1", [ids.bruno]);
+  await as(ids.ana, "update public.profiles set pref_skin_colors = array['parda'] where id = $1", [ids.ana]);
+  const bySkin = await deckOf(ids.ana);
+  check("preferência de cor filtra e deixa de fora quem não informou", bySkin.length === 1 && bySkin[0] === ids.bruno, bySkin);
+  await clearPrefs();
+  const publicDeck = await as(ids.ana, "select * from public.discover_profiles()");
+  check("descoberta não entrega a cor da pele", publicDeck.length > 0 && !("skin_color" in publicDeck[0]), publicDeck[0]);
+  check("descoberta entrega altura e igreja", "height_cm" in publicDeck[0] && "church" in publicDeck[0], publicDeck[0]);
+  const publicProfile = await as(ids.ana, "select * from public.get_public_profile($1)", [ids.bruno]);
+  check("perfil público não entrega a cor da pele", publicProfile.length === 1 && !("skin_color" in publicProfile[0]), publicProfile[0]);
+
+  // Sexo: vale nos dois sentidos.
+  await as(ids.ana, "update public.profiles set pref_genders = array['female'] where id = $1", [ids.ana]);
+  const oneWay = await deckOf(ids.ana);
+  check("preferência em mão única não mostra ninguém", oneWay.length === 0, oneWay);
+  await denied("não curte quem não quer ver você", ids.ana, "select public.record_swipe($1, 'like')", [ids.dora]);
+  await as(ids.dora, "update public.profiles set pref_genders = array['female'] where id = $1", [ids.dora]);
+  const mutual = await deckOf(ids.ana);
+  check("preferência dos dois lados aparece no deck", mutual.length === 1 && mutual[0] === ids.dora, mutual);
+  const reverse = await deckOf(ids.dora);
+  check("o outro lado também vê", reverse.length === 1 && reverse[0] === ids.ana, reverse);
+  const pairStories = await as(ids.ana, "select id from public.story_profiles()");
+  check("stories seguem a preferência", pairStories.length === 1 && pairStories[0].id === ids.dora, pairStories);
+  const liked = await as<{ m: boolean }>(ids.ana, "select public.record_swipe($1, 'like') as m", [ids.dora]);
+  check("preferência mútua permite curtir", liked[0].m === false, liked);
+  await db.query("delete from public.swipes where swiper_id = $1 and target_id = $2", [ids.ana, ids.dora]);
+  await clearPrefs();
+  await denied("sem preferência, continua sem curtir o mesmo sexo", ids.ana, "select public.record_swipe($1, 'like')", [ids.dora]);
+
+  // Validação
+  await denied("altura fora do limite", ids.ana, "update public.profiles set height_cm = 40 where id = $1", [ids.ana]);
+  await denied("cor fora da lista", ids.ana, "update public.profiles set skin_color = 'azul' where id = $1", [ids.ana]);
+  await denied("preferência de sexo fora da lista", ids.ana, "update public.profiles set pref_genders = array['outro'] where id = $1", [ids.ana]);
+  await denied("regra interna não é chamada direto", ids.ana, "select public.can_pair($1, $2)", [ids.ana, ids.bruno]);
+  await as(ids.ana, "update public.profiles set height_cm = 168, skin_color = 'branca' where id = $1", [ids.ana]);
+  const own = await as(ids.ana, "select height_cm, skin_color from public.profiles where id = $1", [ids.ana]);
+  check("usuário grava altura e cor", own[0]?.height_cm === 168 && own[0]?.skin_color === "branca", own);
+}
+
+async function testChat() {
+  const send = "select public.send_message($1, $2) as id";
+
+  const sent = await as<{ id: string }>(ids.ana, send, [ids.bruno, "  Oi, tudo bem?  "]);
+  check("match manda mensagem", Boolean(sent[0]?.id), sent);
+  const stored = await db.query<{ body: string }>("select body from public.messages where id = $1", [sent[0].id]);
+  check("mensagem é gravada sem espaços nas pontas", stored.rows[0]?.body === "Oi, tudo bem?", stored.rows);
+
+  await denied("sem match não manda mensagem", ids.ana, send, [ids.carlos, "Oi"]);
+  await denied("mensagem vazia barrada", ids.ana, send, [ids.bruno, "   "]);
+  await denied("mensagem gigante barrada", ids.ana, send, [ids.bruno, "x".repeat(1001)]);
+  await denied("anon não manda mensagem", null, send, [ids.bruno, "Oi"]);
+  await denied("membro não lê mensagens direto", ids.ana, "select * from public.messages");
+  await denied("membro não grava mensagem direto", ids.ana, "insert into public.messages (sender_id, recipient_id, body) values ($1, $2, 'x')", [ids.ana, ids.bruno]);
+  await denied("membro não lê as inscrições de notificação", ids.ana, "select * from public.push_subscriptions");
+
+  const inbox = await as(ids.bruno, "select * from public.chat_messages($1)", [ids.ana]);
+  check("destinatário recebe a mensagem", inbox.length === 1 && inbox[0].read_at === null, inbox);
+  const outsider = await as(ids.carlos, "select * from public.chat_messages($1)", [ids.ana]);
+  check("terceiro não lê a conversa", outsider.length === 0, outsider);
+
+  const unreadOf = async (uid: string) =>
+    (await as<{ n: number }>(uid, "select public.unread_messages() as n", []))[0].n;
+  check("não lida conta para quem recebeu", (await unreadOf(ids.bruno)) === 1 && (await unreadOf(ids.ana)) === 0);
+
+  const hisList = await as(ids.bruno, "select * from public.my_conversations()");
+  check("conversa mostra a última mensagem e as não lidas", hisList.length === 1 && hisList[0].last_body === "Oi, tudo bem?" && hisList[0].unread === 1 && hisList[0].last_from_me === false, hisList);
+  const herList = await as(ids.ana, "select * from public.my_conversations()");
+  check("quem mandou vê a própria mensagem", herList[0]?.last_from_me === true && herList[0]?.unread === 0, herList);
+
+  await as(ids.carlos, "select public.mark_chat_read($1)", [ids.ana]);
+  check("terceiro não marca como lida", (await unreadOf(ids.bruno)) === 1);
+  await as(ids.ana, "select public.mark_chat_read($1)", [ids.bruno]);
+  check("quem mandou não marca a própria como lida", (await unreadOf(ids.bruno)) === 1);
+  await as(ids.bruno, "select public.mark_chat_read($1)", [ids.ana]);
+  const seen = await as(ids.ana, "select * from public.chat_messages($1)", [ids.bruno]);
+  check("quem mandou vê que foi visualizada", seen[0]?.read_at !== null, seen);
+  check("visualizar zera as não lidas", (await unreadOf(ids.bruno)) === 0);
+
+  await as(ids.bruno, "select public.record_swipe($1, 'pass')", [ids.ana]);
+  await denied("desfazer o match corta o chat", ids.ana, send, [ids.bruno, "Oi?"]);
+  const closed = await as(ids.ana, "select * from public.chat_messages($1)", [ids.bruno]);
+  check("sem match, a conversa some", closed.length === 0, closed);
+  await as(ids.bruno, "select public.record_swipe($1, 'like')", [ids.ana]);
+}
+
+async function testEvents() {
+  const create = `insert into public.events (owner_id, name, description, location, organizer, starts_at, photo_paths)
+    values ($1::uuid, 'Culto jovem', 'Louvor e pizza', 'Igreja Central', 'Aninha', now() + interval '2 days', array[$1::text || '/e.jpg'])
+    returning id`;
+  const [event] = await as<{ id: string }>(ids.ana, create, [ids.ana]);
+  check("membro cria evento", Boolean(event?.id), event);
+
+  const listed = await as(ids.bruno, "select * from public.list_events()");
+  check("todo membro vê o evento", listed.length === 1 && listed[0].name === "Culto jovem", listed);
+  check("quem criou já vai", listed[0].going_count === 1 && listed[0].going === false, listed[0]);
+
+  const toggle = "select public.toggle_event_attendance($1) as going";
+  const yes = await as<{ going: boolean }>(ids.bruno, toggle, [event.id]);
+  check("confirmar presença", yes[0].going === true, yes);
+  const people = await as(ids.carlos, "select * from public.event_people($1)", [event.id]);
+  check("lista mostra quem vai", people.length === 2 && people.some((person) => person.nickname === "Bru"), people);
+  const detail = await as(ids.bruno, "select * from public.get_event($1)", [event.id]);
+  check("evento conta os confirmados", detail[0]?.going_count === 2 && detail[0]?.going === true, detail);
+  const no = await as<{ going: boolean }>(ids.bruno, toggle, [event.id]);
+  check("desistir de ir", no[0].going === false, no);
+
+  await as(ids.bruno, "update public.events set name = 'Invadido' where id = $1", [event.id]);
+  await as(ids.bruno, "delete from public.events where id = $1", [event.id]);
+  const intact = await db.query<{ name: string }>("select name from public.events where id = $1", [event.id]);
+  check("só quem criou edita e exclui", intact.rows[0]?.name === "Culto jovem", intact.rows);
+  await as(ids.ana, "update public.events set name = 'Culto de jovens' where id = $1", [event.id]);
+  const edited = await db.query<{ name: string }>("select name from public.events where id = $1", [event.id]);
+  check("dono edita o evento", edited.rows[0]?.name === "Culto de jovens", edited.rows);
+
+  await denied("evento não usa foto alheia", ids.ana, "update public.events set photo_paths = array[$2] where id = $1", [event.id, `${ids.bruno}/x.jpg`]);
+  await denied("no máximo 3 fotos no evento", ids.ana, "update public.events set photo_paths = array[$2::text || '/1', $2::text || '/2', $2::text || '/3', $2::text || '/4'] where id = $1::uuid", [event.id, ids.ana]);
+  await denied("não cria evento em nome de outra pessoa", ids.bruno, create, [ids.ana]);
+  await denied("sem perfil não cria evento", ids.intruso, create, [ids.intruso]);
+  await denied("anon não lista eventos", null, "select * from public.list_events()");
+  await denied("membro não mexe em presença direto", ids.bruno, "insert into public.event_attendees (event_id, user_id) values ($1, $2)", [event.id, ids.bruno]);
+  const ghost = await as(ids.intruso, "select * from public.list_events()");
+  check("sem perfil não vê eventos", ghost.length === 0, ghost);
+
+  await db.query("update public.events set starts_at = now() - interval '1 hour' where id = $1", [event.id]);
+  await denied("evento que já começou não aceita confirmação", ids.bruno, toggle, [event.id]);
+
+  await as(ids.ana, "delete from public.events where id = $1", [event.id]);
+  const left = await db.query("select 1 from public.event_attendees where event_id = $1", [event.id]);
+  check("excluir o evento leva as presenças", left.rows.length === 0, left.rows);
+}
+
 async function testDeck() {
   // Bruno ainda não passou pela Dora: quem não foi visto vem antes de quem já foi.
   await db.query("insert into auth.users (id) values ($1)", [ids.dora]);
@@ -355,6 +508,9 @@ async function run() {
   await testDeck();
   await testStories();
   await testInsights();
+  await testCompatibility();
+  await testChat();
+  await testEvents();
 
   // Assinaturas
   await db.query("insert into public.subscriptions (user_id, checkout_id) values ($1, 'bill_1')", [ids.ana]);

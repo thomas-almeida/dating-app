@@ -6,6 +6,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
+import webpush from "web-push";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -41,6 +42,9 @@ const FAR_FUTURE = 4102444800;
 const ANON_KEY = sign({ role: "anon", iss: "fake", exp: FAR_FUTURE });
 const SERVICE_KEY = sign({ role: "service_role", iss: "fake", exp: FAR_FUTURE });
 
+const vapid = webpush.generateVAPIDKeys();
+const pushLog = [];
+
 const APP_ENV = {
   NEXT_PUBLIC_SUPABASE_URL: `http://localhost:${PORT}`,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ANON_KEY,
@@ -50,6 +54,9 @@ const APP_ENV = {
   ABACATEPAY_API_KEY: "chave-falsa",
   ABACATEPAY_PRO_PRODUCT_ID: "prod_fake",
   ABACATEPAY_WEBHOOK_SECRET: WEBHOOK_SECRET,
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: vapid.publicKey,
+  VAPID_PRIVATE_KEY: vapid.privateKey,
+  VAPID_SUBJECT: "mailto:teste@exemplo.com",
 };
 
 // ---- banco
@@ -119,6 +126,10 @@ const SCALAR_FUNCTIONS = [
   "view_story",
   "toggle_story_like",
   "record_profile_view",
+  "send_message",
+  "mark_chat_read",
+  "unread_messages",
+  "toggle_event_attendance",
 ];
 
 const RESERVED = new Set(["select", "order", "limit", "offset", "on_conflict", "columns"]);
@@ -623,6 +634,15 @@ const server = http.createServer(async (req, res) => {
       const result = await db.query(rawBody.toString());
       return sendJson(res, 200, result.rows);
     }
+    if (url.pathname.startsWith("/__push/")) {
+      pushLog.push({
+        encoding: req.headers["content-encoding"],
+        scheme: req.headers.authorization?.split(" ")[0],
+        bytes: rawBody.length,
+      });
+      return sendJson(res, 201, {});
+    }
+    if (url.pathname === "/__pushes") return sendJson(res, 200, pushLog);
     if (url.pathname === "/__env") return sendJson(res, 200, APP_ENV);
     if (url.pathname === "/__webhooks") return sendJson(res, 200, webhookLog);
     if (url.pathname === "/__files") return sendJson(res, 200, [...files.keys()]);
