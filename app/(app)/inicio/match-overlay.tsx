@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart } from "lucide-react";
+import { Heart, MessageCircle } from "lucide-react";
 import { motion, MotionConfig } from "motion/react";
 import Link from "next/link";
 import { useRef, useState } from "react";
@@ -181,10 +181,22 @@ export function MatchOverlay({
           </p>
 
           <div className="mt-3 flex flex-wrap justify-center gap-1.5 empty:hidden">
-            <HobbyTags hobbies={card.hobbies} sameRegion={card.sameRegion} />
+            <HobbyTags
+              hobbies={card.hobbies}
+              sameRegion={card.sameRegion}
+              church={card.church}
+              sameChurch={card.sameChurch}
+            />
           </div>
 
           <div className="mt-7 space-y-2">
+            <Link
+              href={`/conversas/${card.id}`}
+              className="flex h-13 items-center justify-center gap-2 rounded-full bg-coral font-semibold text-ink transition active:scale-[0.98]"
+            >
+              <MessageCircle className="size-5" aria-hidden />
+              Abrir conversa
+            </Link>
             {canMessage && <WhatsAppButton href={href} />}
             <Link
               href={`/perfil/${card.id}`}

@@ -1,11 +1,33 @@
 import Link from "next/link";
-import { Heart, Layers, User } from "lucide-react";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { CalendarDays, Heart, Layers, User } from "lucide-react";
+import { supabaseEnv } from "@/lib/supabase/env";
+import { createClient } from "@/lib/supabase/server";
 
 const ITEMS = [
   { key: "inicio", href: "/inicio", label: "Início", icon: Layers },
   { key: "matches", href: "/matches", label: "Matches", icon: Heart },
+  { key: "eventos", href: "/eventos", label: "Eventos", icon: CalendarDays },
   { key: "perfil", href: "/perfil", label: "Perfil", icon: User },
 ] as const;
+
+async function UnreadDot() {
+  await connection();
+  if (!supabaseEnv()) return null;
+
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("unread_messages");
+  if (!data) return null;
+
+  return (
+    <span
+      role="status"
+      aria-label={`${data} mensagens não lidas`}
+      className="absolute top-1.5 right-2 size-2.5 rounded-full bg-coral ring-2 ring-surface"
+    />
+  );
+}
 
 export function BottomNav({ active }: { active: (typeof ITEMS)[number]["key"] }) {
   return (
@@ -14,17 +36,22 @@ export function BottomNav({ active }: { active: (typeof ITEMS)[number]["key"] })
         {ITEMS.map(({ key, href, label, icon: Icon }) => {
           const isActive = key === active;
           return (
-            <li key={key} className={isActive ? "flex-1" : ""}>
+            <li key={key} className={`relative ${isActive ? "flex-1" : ""}`}>
               <Link
                 href={href}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold transition ${
+                className={`flex h-11 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold transition ${
                   isActive ? "bg-cream text-ink" : "text-muted"
                 }`}
               >
                 <Icon className="size-5" aria-hidden />
                 <span className={isActive ? "" : "sr-only"}>{label}</span>
               </Link>
+              {key === "matches" && (
+                <Suspense fallback={null}>
+                  <UnreadDot />
+                </Suspense>
+              )}
             </li>
           );
         })}

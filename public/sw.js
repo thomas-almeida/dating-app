@@ -52,3 +52,28 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
   }
 });
+
+self.addEventListener("push", (event) => {
+  const { title, body, url, tag } = event.data.json();
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      tag,
+      icon: "/icons/icon-192.png",
+      data: { url },
+    }),
+  );
+});
+
+// Aproveita uma janela aberta do app, para não empilhar outra a cada notificação.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const { url } = event.notification.data;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((client) => "navigate" in client);
+      return open ? open.navigate(url).then((client) => client.focus()) : self.clients.openWindow(url);
+    }),
+  );
+});

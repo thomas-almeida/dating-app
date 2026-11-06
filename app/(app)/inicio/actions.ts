@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
-import { DECK_SIZE, MEDIA_BUCKET, STORY_TTL_HOURS } from "@/lib/config";
+import { APP_NAME, DECK_SIZE, MEDIA_BUCKET, STORY_TTL_HOURS } from "@/lib/config";
 import { requireMember } from "@/lib/dal";
 import { signPaths, toDeckCards } from "@/lib/media";
+import { notifyUser } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -68,6 +70,15 @@ export async function recordSwipe(targetId: string, action: SwipeAction): Promis
   }
 
   if (data !== true) return { ok: true, match: false, whatsapp: null };
+
+  after(() =>
+    notifyUser(parsed.data.targetId, {
+      title: APP_NAME,
+      body: "Você tem um novo match!",
+      url: "/matches",
+      tag: "match",
+    }),
+  );
 
   // A RLS só devolve o número para quem é Pro: para os outros, vem nulo.
   const { data: contact } = await supabase
