@@ -3,12 +3,13 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { signOut } from "@/app/entrar/actions";
 import { BackButton } from "@/components/back-button";
+import type { MediaItem } from "@/components/media-tiles";
 import { Wordmark } from "@/components/wordmark";
 import { requireUser } from "@/lib/dal";
 import { signPaths } from "@/lib/media";
 import { displayPhone } from "@/lib/phone";
 import { createClient } from "@/lib/supabase/server";
-import { ProfileForm, type MediaItem } from "./profile-form";
+import { ProfileForm } from "./profile-form";
 
 export const metadata: Metadata = { title: "Seu perfil" };
 
@@ -66,6 +67,12 @@ async function Content() {
             city: profile.city ?? "",
             neighborhood: profile.neighborhood ?? "",
             hobbies: profile.hobbies ?? [],
+            heightCm: profile.height_cm ? String(profile.height_cm) : "",
+            church: profile.church ?? "",
+            skinColor: profile.skin_color ?? "",
+            prefGenders: profile.pref_genders ?? [],
+            prefChurches: profile.pref_churches ?? [],
+            prefSkinColors: profile.pref_skin_colors ?? [],
             whatsapp: contact ? displayPhone(contact.whatsapp) : "",
           }}
           initialVideo={toItem(profile.video_path)}

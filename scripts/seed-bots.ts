@@ -25,6 +25,9 @@ const BOTS = [
     city: "São Paulo",
     neighborhood: "Perdizes",
     hobbies: [{ emoji: "✈️", hobbie: "Viagens" }, { emoji: "🙌", hobbie: "Louvor" }, { emoji: "🍳", hobbie: "Cozinhar" }],
+    church: "batista",
+    heightCm: 167,
+    skinColor: "branca",
     photos: ["public/bot/bot-user-1/fulana-3.jpg", "public/bot/bot-user-1/fulana-2.jpg"],
   },
   {
@@ -37,6 +40,9 @@ const BOTS = [
     city: "Santos",
     neighborhood: "Gonzaga",
     hobbies: [{ emoji: "✈️", hobbie: "Viagens" }, { emoji: "🏖️", hobbie: "Praia" }],
+    church: "catolica",
+    heightCm: 160,
+    skinColor: "amarela",
     photos: ["public/bot/bot-user-2/fulana-1.jpg", "public/bot/bot-user-2/fulana-3.jpg"],
   },
   {
@@ -49,6 +55,9 @@ const BOTS = [
     city: "Rio de Janeiro",
     neighborhood: "Botafogo",
     hobbies: [{ emoji: "🙌", hobbie: "Louvor" }, { emoji: "🏖️", hobbie: "Praia" }],
+    church: "assembleia",
+    heightCm: 172,
+    skinColor: "preta",
     photos: ["public/bot/bot-user-3/fulana-1.jpg", "public/bot/bot-user-3/fulana-2.jpg"],
     video: "public/bot/bot-user-3/fulana-3.mp4",
   },
@@ -137,6 +146,9 @@ async function createBot(supabase: SupabaseClient, bot: (typeof BOTS)[number], i
       city: bot.city,
       neighborhood: bot.neighborhood,
       hobbies: bot.hobbies,
+      church: bot.church,
+      height_cm: bot.heightCm,
+      skin_color: bot.skinColor,
       video_path: videoPath,
       photo_paths: photoPaths,
     })
@@ -169,10 +181,18 @@ async function refreshStories(supabase: SupabaseClient, botIds: string[]) {
 
 // Quem já existe só ganha os dados novos: mídia, curtidas e stories continuam como estão.
 async function refreshBot(supabase: SupabaseClient, id: string, bot: (typeof BOTS)[number]) {
-  const { state, city, neighborhood, hobbies } = bot;
+  const { state, city, neighborhood, hobbies, church, heightCm, skinColor } = bot;
   const { error } = await supabase
     .from("profiles")
-    .update({ state, city, neighborhood, hobbies })
+    .update({
+      state,
+      city,
+      neighborhood,
+      hobbies,
+      church,
+      height_cm: heightCm,
+      skin_color: skinColor,
+    })
     .eq("id", id);
   if (error) throw error;
   return id;

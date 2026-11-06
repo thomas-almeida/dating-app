@@ -1,6 +1,6 @@
 import "server-only";
 import { placeLabel, sameRegion, tagHobbies } from "@/lib/affinity";
-import { MEDIA_BUCKET, SIGNED_URL_TTL_SECONDS } from "@/lib/config";
+import { churchLabel, MEDIA_BUCKET, SIGNED_URL_TTL_SECONDS } from "@/lib/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DeckCard, Profile, PublicProfile } from "@/lib/types";
 
@@ -37,5 +37,7 @@ export async function toDeckCards(
     place: placeLabel(profile),
     hobbies: tagHobbies(viewer.hobbies, profile.hobbies),
     sameRegion: sameRegion(viewer, profile),
+    church: churchLabel(profile.church),
+    sameChurch: profile.church !== null && profile.church === viewer.church,
   }));
 }

@@ -4,12 +4,27 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { emojiKey, isSingleEmoji } from "@/lib/affinity";
-import { BRAZIL_STATES, MAX_HOBBIES, MAX_PHOTOS, MEDIA_BUCKET } from "@/lib/config";
+import {
+  BRAZIL_STATES,
+  CHURCHES,
+  MAX_HEIGHT_CM,
+  MAX_HOBBIES,
+  MAX_PHOTOS,
+  MEDIA_BUCKET,
+  MIN_HEIGHT_CM,
+  SKIN_COLORS,
+} from "@/lib/config";
 import { requireUser } from "@/lib/dal";
 import { normalizePhone } from "@/lib/phone";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/types";
+
+const CHURCH_VALUES = CHURCHES.map(({ value }) => value);
+const SKIN_VALUES = SKIN_COLORS.map(({ value }) => value);
+
+// O select e o campo de número vazios chegam como texto vazio.
+const emptyToNull = (value: unknown) => (value === "" ? null : value);
 
 const hobbySchema = z.object({
   emoji: z.string().trim().refine(isSingleEmoji, "Use um emoji só em cada gosto."),
@@ -32,6 +47,20 @@ const schema = z.object({
       (hobbies) => new Set(hobbies.map(({ emoji }) => emojiKey(emoji))).size === hobbies.length,
       "Use um emoji diferente em cada gosto.",
     ),
+  heightCm: z.preprocess(
+    emptyToNull,
+    z.coerce
+      .number({ error: "Informe a altura em centímetros." })
+      .int("Informe a altura em centímetros.")
+      .min(MIN_HEIGHT_CM, `Informe uma altura a partir de ${MIN_HEIGHT_CM} cm.`)
+      .max(MAX_HEIGHT_CM, `Informe uma altura de até ${MAX_HEIGHT_CM} cm.`)
+      .nullable(),
+  ),
+  church: z.preprocess(emptyToNull, z.enum(CHURCH_VALUES).nullable()),
+  skinColor: z.preprocess(emptyToNull, z.enum(SKIN_VALUES).nullable()),
+  prefGenders: z.array(z.enum(["male", "female"])),
+  prefChurches: z.array(z.enum(CHURCH_VALUES)),
+  prefSkinColors: z.array(z.enum(SKIN_VALUES)),
   whatsapp: z.string(),
   videoPath: z.string().min(1).nullable(),
   photoPaths: z.array(z.string().min(1)).max(MAX_PHOTOS, `Escolha até ${MAX_PHOTOS} fotos.`),
@@ -67,6 +96,12 @@ export async function saveProfile(_: FormState, formData: FormData): Promise<For
     city: formData.get("city"),
     neighborhood: formData.get("neighborhood"),
     hobbies: parseHobbies(formData.get("hobbies")),
+    heightCm: formData.get("height_cm"),
+    church: formData.get("church"),
+    skinColor: formData.get("skin_color"),
+    prefGenders: formData.getAll("pref_genders"),
+    prefChurches: formData.getAll("pref_churches"),
+    prefSkinColors: formData.getAll("pref_skin_colors"),
     whatsapp: formData.get("whatsapp"),
     videoPath: formData.get("video_path"),
     photoPaths: formData.getAll("photo_paths"),
@@ -77,6 +112,7 @@ export async function saveProfile(_: FormState, formData: FormData): Promise<For
   }
 
   const { name, nickname, bio, gender, birthDate, state, city, neighborhood, hobbies } = parsed.data;
+  const { heightCm, church, skinColor, prefGenders, prefChurches, prefSkinColors } = parsed.data;
   const { videoPath, photoPaths } = parsed.data;
 
   const whatsapp = normalizePhone(parsed.data.whatsapp);
@@ -111,6 +147,12 @@ export async function saveProfile(_: FormState, formData: FormData): Promise<For
       city,
       neighborhood,
       hobbies,
+      height_cm: heightCm,
+      church,
+      skin_color: skinColor,
+      pref_genders: prefGenders,
+      pref_churches: prefChurches,
+      pref_skin_colors: prefSkinColors,
       video_path: videoPath,
       photo_paths: photoPaths,
     })

@@ -23,6 +23,9 @@ const PEOPLE = [
     city: "São Paulo",
     neighborhood: "Vila Mariana",
     hobbies: [{ emoji: "☕", hobbie: "Café" }, { emoji: "🥾", hobbie: "Trilha" }, { emoji: "🙌", hobbie: "Louvor" }],
+    church: "batista",
+    heightCm: 165,
+    skinColor: "branca",
     colors: ["#ff8a5b", "#a02c5c"],
   },
   {
@@ -35,6 +38,9 @@ const PEOPLE = [
     city: "São Paulo",
     neighborhood: "Pinheiros",
     hobbies: [{ emoji: "📖", hobbie: "Leitura" }, { emoji: "☕", hobbie: "Café" }],
+    church: "catolica",
+    heightCm: 170,
+    skinColor: "parda",
     colors: ["#f7b267", "#c8553d"],
   },
   {
@@ -47,6 +53,9 @@ const PEOPLE = [
     city: "Rio de Janeiro",
     neighborhood: "Tijuca",
     hobbies: [{ emoji: "🎵", hobbie: "Música" }, { emoji: "🍳", hobbie: "Cozinhar" }],
+    church: "assembleia",
+    heightCm: 162,
+    skinColor: "preta",
     colors: ["#e56b9e", "#5b2a86"],
   },
   {
@@ -59,6 +68,9 @@ const PEOPLE = [
     city: "Belo Horizonte",
     neighborhood: "Savassi",
     hobbies: [{ emoji: "✈️", hobbie: "Viagens" }, { emoji: "🎨", hobbie: "Arte" }],
+    church: "presbiteriana",
+    heightCm: 168,
+    skinColor: "branca",
     colors: ["#ffa69e", "#b8336a"],
   },
   {
@@ -71,6 +83,9 @@ const PEOPLE = [
     city: "São Paulo",
     neighborhood: "Moema",
     hobbies: [{ emoji: "⚽", hobbie: "Futebol" }, { emoji: "☕", hobbie: "Café" }],
+    church: "batista",
+    heightCm: 182,
+    skinColor: "parda",
     colors: ["#4ea8de", "#3a0ca3"],
   },
   {
@@ -83,6 +98,9 @@ const PEOPLE = [
     city: "Campinas",
     neighborhood: "Cambuí",
     hobbies: [{ emoji: "🥾", hobbie: "Trilha" }, { emoji: "🎮", hobbie: "Games" }],
+    church: "catolica",
+    heightCm: 176,
+    skinColor: "branca",
     colors: ["#48bfe3", "#1b4965"],
   },
   {
@@ -95,6 +113,9 @@ const PEOPLE = [
     city: "Niterói",
     neighborhood: "Icaraí",
     hobbies: [{ emoji: "🏖️", hobbie: "Praia" }, { emoji: "🎵", hobbie: "Música" }],
+    church: "assembleia",
+    heightCm: 179,
+    skinColor: "preta",
     colors: ["#80ed99", "#22577a"],
   },
   {
@@ -107,6 +128,9 @@ const PEOPLE = [
     city: "Curitiba",
     neighborhood: "Batel",
     hobbies: [{ emoji: "🚴", hobbie: "Pedal" }, { emoji: "📖", hobbie: "Leitura" }],
+    church: "adventista",
+    heightCm: 185,
+    skinColor: "amarela",
     colors: ["#f4a261", "#264653"],
   },
 ];
@@ -196,6 +220,9 @@ async function createPerson(
       city: person.city,
       neighborhood: person.neighborhood,
       hobbies: person.hobbies,
+      church: person.church,
+      height_cm: person.heightCm,
+      skin_color: person.skinColor,
       photo_paths: [path],
     })
     .eq("id", id);

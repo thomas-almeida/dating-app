@@ -1,4 +1,14 @@
-import { BadgeCheck, ChevronRight, Eye, Heart, Lock, MapPin, Settings } from "lucide-react";
+import {
+  BadgeCheck,
+  ChevronRight,
+  Eye,
+  Heart,
+  Lock,
+  MapPin,
+  MessageCircle,
+  Ruler,
+  Settings,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -11,7 +21,7 @@ import { LoopVideo } from "@/components/loop-video";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { Wordmark } from "@/components/wordmark";
 import { placeLabel, sameRegion, tagHobbies } from "@/lib/affinity";
-import { APP_NAME } from "@/lib/config";
+import { APP_NAME, churchLabel } from "@/lib/config";
 import { requireMember } from "@/lib/dal";
 import { signPaths } from "@/lib/media";
 import { whatsappUrl } from "@/lib/phone";
@@ -85,6 +95,8 @@ async function Content({ params }: { params: PageProps<"/perfil/[id]">["params"]
   const greeting = `Oi, ${displayName}! Vi seu perfil no ${APP_NAME}.`;
   const whatsappHref = contact ? whatsappUrl(contact.whatsapp, greeting) : null;
   const canAskToMessage = !isOwn && (whatsappHref !== null || !viewer.profile.is_pro);
+  const canChat = !isOwn && person.is_match;
+  const bottomSpace = canChat ? "pb-44" : canAskToMessage ? "pb-28" : "pb-4";
 
   // No próprio perfil não há o que destacar.
   const hobbies = tagHobbies(isOwn ? [] : viewer.profile.hobbies, person.hobbies);
@@ -109,7 +121,7 @@ async function Content({ params }: { params: PageProps<"/perfil/[id]">["params"]
         )}
       </header>
 
-      <div className={`flex-1 space-y-3 px-4 ${canAskToMessage ? "pb-28" : "pb-4"}`}>
+      <div className={`flex-1 space-y-3 px-4 ${bottomSpace}`}>
         <section className="relative aspect-[4/5] overflow-hidden rounded-[2rem] bg-linear-to-b from-raised to-coral-deep/50">
           {videoUrl ? (
             <LoopVideo
@@ -135,6 +147,12 @@ async function Content({ params }: { params: PageProps<"/perfil/[id]">["params"]
                 {place}
               </p>
             )}
+            {person.height_cm && (
+              <p className="mt-0.5 flex items-center gap-1 text-sm text-white/80">
+                <Ruler className="size-3.5 shrink-0" aria-hidden />
+                {(person.height_cm / 100).toFixed(2).replace(".", ",")} m
+              </p>
+            )}
             <div className="mt-2 flex flex-wrap gap-2 empty:hidden">
               {person.is_match && (
                 <span className="flex items-center gap-1.5 rounded-full bg-coral px-3 py-1 text-xs font-semibold text-ink">
@@ -147,7 +165,12 @@ async function Content({ params }: { params: PageProps<"/perfil/[id]">["params"]
                   Pro
                 </span>
               )}
-              <HobbyTags hobbies={hobbies} sameRegion={nearby} />
+              <HobbyTags
+                hobbies={hobbies}
+                sameRegion={nearby}
+                church={churchLabel(person.church)}
+                sameChurch={!isOwn && person.church !== null && person.church === viewer.profile.church}
+              />
             </div>
           </div>
         </section>
@@ -173,10 +196,19 @@ async function Content({ params }: { params: PageProps<"/perfil/[id]">["params"]
         ))}
       </div>
 
-      {canAskToMessage && (
+      {(canChat || canAskToMessage) && (
         <div className="pb-safe fixed inset-x-0 bottom-0 z-10 mx-auto w-full max-w-md bg-linear-to-t from-ink via-ink/90 to-transparent px-5 pt-8">
-          <div className="mb-4">
-            <WhatsAppButton href={whatsappHref} />
+          <div className="mb-4 space-y-2">
+            {canChat && (
+              <Link
+                href={`/conversas/${person.id}`}
+                className="flex h-13 items-center justify-center gap-2 rounded-full bg-coral font-semibold text-ink transition active:scale-[0.98]"
+              >
+                <MessageCircle className="size-5" aria-hidden />
+                Abrir conversa
+              </Link>
+            )}
+            {canAskToMessage && <WhatsAppButton href={whatsappHref} />}
           </div>
         </div>
       )}

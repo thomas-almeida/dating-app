@@ -20,6 +20,12 @@ export type Profile = {
   city: string | null;
   neighborhood: string | null;
   hobbies: Hobby[];
+  height_cm: number | null;
+  skin_color: string | null;
+  church: string | null;
+  pref_genders: string[];
+  pref_churches: string[];
+  pref_skin_colors: string[];
   onboarded_at: string | null;
   app_installed_at: string | null;
   created_at: string;
@@ -62,6 +68,8 @@ export type PublicProfile = {
   city: string | null;
   neighborhood: string | null;
   hobbies: Hobby[];
+  height_cm: number | null;
+  church: string | null;
 };
 
 export type StoryProfile = {
@@ -147,6 +155,49 @@ export type DeckCard = {
   place: string | null;
   hobbies: HobbyTag[];
   sameRegion: boolean;
+  church: string | null;
+  sameChurch: boolean;
+};
+
+export type ChatMessage = {
+  id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+  read_at: string | null;
+};
+
+export type Conversation = {
+  id: string;
+  name: string;
+  nickname: string | null;
+  age: number | null;
+  photo_paths: string[];
+  matched_at: string;
+  last_body: string | null;
+  last_at: string | null;
+  last_from_me: boolean | null;
+  unread: number;
+};
+
+// Retorno das RPCs list_events e get_event.
+export type EventRow = {
+  id: string;
+  owner_id: string;
+  name: string;
+  description: string;
+  location: string;
+  organizer: string;
+  starts_at: string;
+  photo_paths: string[];
+  going_count: number;
+  going: boolean;
+};
+
+export type EventPerson = {
+  id: string;
+  nickname: string;
+  photo_path: string | null;
 };
 
 export type FormState = {

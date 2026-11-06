@@ -163,7 +163,12 @@ function TopCard({
                 Pro
               </span>
             )}
-            <HobbyTags hobbies={card.hobbies} sameRegion={card.sameRegion} />
+            <HobbyTags
+              hobbies={card.hobbies}
+              sameRegion={card.sameRegion}
+              church={card.church}
+              sameChurch={card.sameChurch}
+            />
           </div>
           {card.bio && (
             <p className="mt-1.5 line-clamp-2 text-sm leading-snug text-white/80">{card.bio}</p>

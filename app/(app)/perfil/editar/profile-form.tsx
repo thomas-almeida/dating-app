@@ -1,19 +1,26 @@
 "use client";
 
-import { Film, ImagePlus, LoaderCircle, X } from "lucide-react";
-import { useActionState, useState, type ChangeEvent, type ReactNode } from "react";
+import { Film, ImagePlus } from "lucide-react";
+import { useActionState, useState } from "react";
+import { ChoiceChips } from "@/components/choice-chips";
 import { Field, FormMessage, inputClass, textareaClass } from "@/components/field";
 import { LoopVideo } from "@/components/loop-video";
+import { discardMedia, EmptyTile, FilledTile, type MediaItem } from "@/components/media-tiles";
 import { SubmitButton } from "@/components/submit-button";
-import { BRAZIL_STATES, MAX_PHOTOS, MAX_VIDEO_SECONDS, MEDIA_BUCKET } from "@/lib/config";
+import {
+  BRAZIL_STATES,
+  CHURCHES,
+  MAX_HEIGHT_CM,
+  MAX_PHOTOS,
+  MAX_VIDEO_SECONDS,
+  MIN_HEIGHT_CM,
+  SKIN_COLORS,
+} from "@/lib/config";
 import { MediaError, uploadPhoto, uploadVideo, VIDEO_ACCEPT } from "@/lib/media-upload";
 import { maskPhone } from "@/lib/phone";
-import { createClient } from "@/lib/supabase/client";
 import type { FormState, Gender, Hobby } from "@/lib/types";
 import { saveProfile } from "./actions";
 import { HobbyPicker } from "./hobby-picker";
-
-export type MediaItem = { path: string; url: string };
 
 type ProfileValues = {
   name: string;
@@ -25,6 +32,12 @@ type ProfileValues = {
   city: string;
   neighborhood: string;
   hobbies: Hobby[];
+  heightCm: string;
+  church: string;
+  skinColor: string;
+  prefGenders: string[];
+  prefChurches: string[];
+  prefSkinColors: string[];
   whatsapp: string;
 };
 
@@ -37,80 +50,10 @@ const GENDERS: { value: Gender; label: string }[] = [
   { value: "male", label: "Homem" },
 ];
 
-const tileClass = "relative aspect-[3/4] overflow-hidden rounded-2xl bg-surface";
-
-// Só apaga na hora o que ainda não foi salvo. O resto sai quando o perfil for salvo.
-function discard(item: MediaItem) {
-  if (!item.url.startsWith("blob:")) return;
-  URL.revokeObjectURL(item.url);
-  void createClient().storage.from(MEDIA_BUCKET).remove([item.path]);
-}
-
-function FilledTile({
-  label,
-  onRemove,
-  children,
-}: {
-  label: string;
-  onRemove: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className={tileClass}>
-      {children}
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={`Remover ${label}`}
-        className="absolute top-1.5 right-1.5 flex size-8 items-center justify-center rounded-full bg-black/60 text-cream"
-      >
-        <X className="size-4" aria-hidden />
-      </button>
-    </div>
-  );
-}
-
-function EmptyTile({
-  label,
-  icon,
-  accept,
-  busy,
-  disabled,
-  onPick,
-}: {
-  label: string;
-  icon: ReactNode;
-  accept: string;
-  busy: boolean;
-  disabled: boolean;
-  onPick: (file: File) => void;
-}) {
-  function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    // Sem limpar, escolher o mesmo arquivo de novo não dispara change.
-    event.target.value = "";
-    if (file) onPick(file);
-  }
-
-  return (
-    <label
-      className={`${tileClass} flex flex-col items-center justify-center gap-2 border border-dashed border-line text-muted transition focus-within:border-coral ${
-        disabled ? "opacity-50" : "cursor-pointer hover:text-cream"
-      }`}
-    >
-      {/* Sem name: o arquivo vai direto para o Storage, nunca pela Server Action. */}
-      <input
-        type="file"
-        accept={accept}
-        disabled={disabled}
-        onChange={handleChange}
-        className="sr-only"
-      />
-      {busy ? <LoaderCircle className="size-5 animate-spin" aria-hidden /> : icon}
-      <span className="text-xs font-medium">{busy ? "Enviando" : label}</span>
-    </label>
-  );
-}
+const PREFERRED_GENDERS = [
+  { value: "female", label: "Mulheres" },
+  { value: "male", label: "Homens" },
+];
 
 export function ProfileForm({
   userId,
@@ -168,12 +111,12 @@ export function ProfileForm({
   }
 
   function removeVideo() {
-    if (video) discard(video);
+    if (video) discardMedia(video);
     setVideo(null);
   }
 
   function removePhoto(item: MediaItem) {
-    discard(item);
+    discardMedia(item);
     setPhotos((current) => current.filter(({ path }) => path !== item.path));
   }
 
@@ -355,6 +298,103 @@ export function ProfileForm({
           className={inputClass}
         />
       </Field>
+
+      <section aria-labelledby="about-title" className="space-y-5">
+        <div>
+          <h2 id="about-title" className="font-display text-xl font-semibold">
+            Sobre você
+          </h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            É opcional, mas ajuda a encontrar quem combina com você.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-[7rem_1fr] gap-3">
+          <Field label="Altura (cm)">
+            <input
+              type="number"
+              name="height_cm"
+              inputMode="numeric"
+              min={MIN_HEIGHT_CM}
+              max={MAX_HEIGHT_CM}
+              placeholder="170"
+              value={values.heightCm}
+              onChange={(event) => update("heightCm", event.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Igreja">
+            <select
+              name="church"
+              value={values.church}
+              onChange={(event) => update("church", event.target.value)}
+              className={`${inputClass} scheme-dark`}
+            >
+              <option value="">Prefiro não dizer</option>
+              {CHURCHES.map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <Field
+          label="Cor da pele"
+          hint="Não aparece no seu perfil: só decide em quais buscas você entra."
+        >
+          <select
+            name="skin_color"
+            value={values.skinColor}
+            onChange={(event) => update("skinColor", event.target.value)}
+            className={`${inputClass} scheme-dark`}
+          >
+            <option value="">Prefiro não dizer</option>
+            {SKIN_COLORS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </section>
+
+      <section aria-labelledby="preferences-title" className="space-y-5">
+        <div>
+          <h2 id="preferences-title" className="font-display text-xl font-semibold">
+            Quem você quer ver
+          </h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            Marque só o que importa. Quanto mais filtros, menos pessoas aparecem.
+          </p>
+        </div>
+
+        <ChoiceChips
+          name="pref_genders"
+          label="Sexo"
+          hint="Sem marcar nada, você vê o sexo oposto."
+          options={PREFERRED_GENDERS}
+          value={values.prefGenders}
+          onChange={(selected) => update("prefGenders", selected)}
+        />
+        <ChoiceChips
+          name="pref_churches"
+          label="Igreja que você quer ver"
+          hint="Sem marcar nada, aparecem todas."
+          options={CHURCHES}
+          value={values.prefChurches}
+          onChange={(selected) => update("prefChurches", selected)}
+        />
+        <ChoiceChips
+          name="pref_skin_colors"
+          label="Cor da pele que você quer ver"
+          hint="Sem marcar nada, aparecem todas."
+          options={SKIN_COLORS}
+          value={values.prefSkinColors}
+          onChange={(selected) => update("prefSkinColors", selected)}
+        />
+      </section>
 
       <Field label="WhatsApp" hint="Só quem assina o Pro consegue ver esse número.">
         <input
