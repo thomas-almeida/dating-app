@@ -1,4 +1,4 @@
-import { Crown, User } from "lucide-react";
+import { Crown, ShieldCheck, User } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -17,7 +17,7 @@ import { Stories } from "./stories";
 export const metadata: Metadata = { title: "Início" };
 
 async function Content() {
-  const { user, profile } = await requireMember();
+  const { user, profile, isAdmin } = await requireMember();
   const supabase = await createClient();
 
   const [discovered, stories, feed] = await Promise.all([
@@ -71,15 +71,26 @@ async function Content() {
             )}
           </Link>
           <Wordmark />
-          <Link
-            href="/pro"
-            aria-label="Conhecer o Pro"
-            className={`flex size-10 items-center justify-center rounded-full transition ${
-              profile.is_pro ? "bg-coral text-ink" : "bg-surface text-cream hover:bg-raised"
-            }`}
-          >
-            <Crown className="size-4" aria-hidden />
-          </Link>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Link
+                href="/admin"
+                aria-label="Abrir painel administrativo"
+                className="flex size-10 items-center justify-center rounded-full bg-surface text-cream transition hover:bg-raised"
+              >
+                <ShieldCheck className="size-4" aria-hidden />
+              </Link>
+            )}
+            <Link
+              href="/pro"
+              aria-label="Conhecer o Pro"
+              className={`flex size-10 items-center justify-center rounded-full transition ${
+                profile.is_pro ? "bg-coral text-ink" : "bg-surface text-cream hover:bg-raised"
+              }`}
+            >
+              <Crown className="size-4" aria-hidden />
+            </Link>
+          </div>
         </div>
       </header>
 
