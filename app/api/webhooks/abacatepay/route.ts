@@ -1,6 +1,9 @@
+import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { verifyWebhookSecret, verifyWebhookSignature } from "@/lib/abacatepay";
+import { emailLayout, sendEmailToUser } from "@/lib/email";
+import { siteOrigin } from "@/lib/site";
 import { closeSubscription } from "@/lib/subscriptions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Subscription } from "@/lib/types";
@@ -159,8 +162,40 @@ export async function POST(request: Request) {
       return Response.json({ ok: true });
     }
 
-    if (ACTIVATING.has(event)) await activate(admin, row, data);
-    else if (ENDING.has(event)) await closeSubscription(row);
+    if (ACTIVATING.has(event)) {
+      await activate(admin, row, data);
+      const origin = await siteOrigin();
+      after(() =>
+        sendEmailToUser(row.user_id, {
+          subject: "Pagamento confirmado: seu Pro está ativo",
+          text: "Seu pagamento foi confirmado e o plano Pro já está ativo.",
+          html: emailLayout({
+            preheader: "Seu pagamento foi confirmado.",
+            title: "Seu Pro está ativo",
+            paragraphs: ["Seu pagamento foi confirmado.", "Seu plano Pro já está ativo."],
+            button: { label: "Abrir o Ágape", url: `${origin}/pro` },
+          }),
+        }),
+      );
+    } else if (ENDING.has(event)) {
+      await closeSubscription(row);
+      const origin = await siteOrigin();
+      after(() =>
+        sendEmailToUser(row.user_id, {
+          subject: "Atualização da sua assinatura Pro",
+          text: "Sua assinatura Pro foi encerrada ou teve um problema no pagamento. Confira os detalhes no app.",
+          html: emailLayout({
+            preheader: "Atualização importante sobre sua assinatura.",
+            title: "Atualização da assinatura",
+            paragraphs: [
+              "Sua assinatura Pro foi encerrada ou teve um problema no pagamento.",
+              "Confira os detalhes no app.",
+            ],
+            button: { label: "Ver assinatura", url: `${origin}/pro` },
+          }),
+        }),
+      );
+    }
 
     const { error } = await admin
       .from("payment_events")

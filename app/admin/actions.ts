@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/dal";
+import { emailLayout, sendEmail } from "@/lib/email";
 import { createInvite } from "@/lib/invite";
 import { siteOrigin } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -32,7 +34,7 @@ export async function approveEntry(id: string): Promise<AdminResult> {
     })
     .eq("id", parsed.data)
     .neq("status", "activated")
-    .select("id")
+    .select("id, email")
     .maybeSingle();
 
   if (error || !data) {
@@ -40,8 +42,22 @@ export async function approveEntry(id: string): Promise<AdminResult> {
     return FAILED;
   }
 
+  const inviteUrl = `${await siteOrigin()}/convite/${invite.token}`;
+  after(() =>
+    sendEmail(data.email, {
+      subject: "Seu acesso foi aprovado",
+      text: `Sua entrada no Ágape foi aprovada. Crie sua senha pelo link: ${inviteUrl}`,
+      html: emailLayout({
+        preheader: "Seu acesso ao Ágape foi aprovado.",
+        title: "Acesso aprovado",
+        paragraphs: ["Sua entrada no Ágape foi aprovada.", "Crie sua senha para acessar o app."],
+        button: { label: "Criar minha senha", url: inviteUrl },
+      }),
+    }),
+  );
+
   revalidatePath("/admin");
-  return { ok: true, inviteUrl: `${await siteOrigin()}/convite/${invite.token}` };
+  return { ok: true, inviteUrl };
 }
 
 export async function rejectEntry(id: string): Promise<AdminResult> {

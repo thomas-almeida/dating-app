@@ -127,6 +127,10 @@ npx web-push generate-vapid-keys
 
 Sem elas, o app funciona normalmente e não oferece as notificações. Trocar as chaves invalida os aparelhos já inscritos.
 
+Os avisos de aprovação, novas mensagens, matches e pagamentos usam Resend. Configure `RESEND_API_KEY` e um `RESEND_FROM_EMAIL` de um domínio verificado no Resend. Sem essas variáveis, o app continua funcionando, mas os e-mails não são enviados.
+
+Para melhorar a entrega, verifique o domínio remetente no Resend e publique os registros SPF e DKIM indicados por ele. Configure também um DMARC no DNS, começando com uma política de monitoramento (`p=none`) antes de endurecê-la. Use endereço do seu próprio domínio como remetente, não um endereço gratuito.
+
 ## Eventos
 
 Só quem criou edita e exclui, e essa pessoa já entra como confirmada. As fotos ficam na pasta dela no Storage e saem junto quando são removidas. A data é sempre lida e mostrada em horário de Brasília (`lib/event-date.ts`). A lista mostra os próximos eventos e os do último dia, e um evento que já começou não aceita novas confirmações.

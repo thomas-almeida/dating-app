@@ -5,8 +5,10 @@ import { after } from "next/server";
 import { z } from "zod";
 import { APP_NAME, DECK_SIZE, MEDIA_BUCKET, STORY_TTL_HOURS } from "@/lib/config";
 import { requireMember } from "@/lib/dal";
+import { emailLayout, sendEmailToUser } from "@/lib/email";
 import { signPaths, toDeckCards } from "@/lib/media";
 import { notifyUser } from "@/lib/push";
+import { siteOrigin } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -71,13 +73,27 @@ export async function recordSwipe(targetId: string, action: SwipeAction): Promis
 
   if (data !== true) return { ok: true, match: false, whatsapp: null };
 
+  const origin = await siteOrigin();
+
   after(() =>
-    notifyUser(parsed.data.targetId, {
-      title: APP_NAME,
-      body: "Você tem um novo match!",
-      url: "/matches",
-      tag: "match",
-    }),
+    Promise.all([
+      notifyUser(parsed.data.targetId, {
+        title: APP_NAME,
+        body: "Você tem um novo match!",
+        url: "/matches",
+        tag: "match",
+      }),
+      sendEmailToUser(parsed.data.targetId, {
+        subject: "Você tem um novo match",
+        text: `Você tem um novo match no ${APP_NAME}. Abra o app para conhecer essa pessoa.`,
+        html: emailLayout({
+          preheader: "Você tem um novo match no Ágape.",
+          title: "Novo match",
+          paragraphs: [`Você tem um novo match no ${APP_NAME}.`, "Abra o app para conhecer essa pessoa."],
+          button: { label: "Ver meu match", url: `${origin}/matches` },
+        }),
+      }),
+    ]),
   );
 
   // A RLS só devolve o número para quem é Pro: para os outros, vem nulo.

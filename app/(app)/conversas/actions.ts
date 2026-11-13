@@ -5,7 +5,9 @@ import { after } from "next/server";
 import { z } from "zod";
 import { APP_NAME, MAX_MESSAGE_LENGTH } from "@/lib/config";
 import { requireMember } from "@/lib/dal";
+import { emailLayout, sendEmailToUser } from "@/lib/email";
 import { isPushEndpoint, notifyUser } from "@/lib/push";
+import { siteOrigin } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -35,14 +37,31 @@ export async function sendMessage(to: string, body: string): Promise<{ ok: boole
     return { ok: false };
   }
 
+  const origin = await siteOrigin();
+
   // O texto fica de fora: a notificação aparece na tela bloqueada.
   after(() =>
-    notifyUser(parsed.data.to, {
-      title: APP_NAME,
-      body: `${profile.nickname ?? profile.name} te mandou uma mensagem`,
-      url: `/conversas/${user.id}`,
-      tag: `chat-${user.id}`,
-    }),
+    Promise.all([
+      notifyUser(parsed.data.to, {
+        title: APP_NAME,
+        body: `${profile.nickname ?? profile.name} te mandou uma mensagem`,
+        url: `/conversas/${user.id}`,
+        tag: `chat-${user.id}`,
+      }),
+      sendEmailToUser(parsed.data.to, {
+        subject: `${profile.nickname ?? profile.name} te enviou uma mensagem`,
+        text: `${profile.nickname ?? profile.name} te enviou uma mensagem no ${APP_NAME}. Abra o app para responder.`,
+        html: emailLayout({
+          preheader: `${profile.nickname ?? profile.name} te enviou uma mensagem.`,
+          title: "Você recebeu uma mensagem",
+          paragraphs: [
+            `${profile.nickname ?? profile.name} te enviou uma mensagem no ${APP_NAME}.`,
+            "Abra o app para responder.",
+          ],
+          button: { label: "Abrir conversa", url: `${origin}/conversas/${user.id}` },
+        }),
+      }),
+    ]),
   );
 
   revalidatePath("/matches");
