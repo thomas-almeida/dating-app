@@ -12,11 +12,12 @@ Stack: Next.js 16, TypeScript, Tailwind 4, Supabase e AbacatePay.
 2. O admin aprova em `/admin` e recebe um link de convite, que manda pelo WhatsApp.
 3. Pelo link (`/convite/[token]`), a pessoa cria a senha.
 4. Ela preenche o perfil (`/perfil/editar`). A home só abre com o perfil completo.
-5. Na home (`/inicio`), curte ou passa nos cards. Curtida dos dois lados vira match (`/matches`). Quem já passou volta depois de quem ainda não foi visto.
-6. Qualquer pessoa posta story: 1 a cada 24 horas no plano free, sem limite no Pro. O dono vê quem viu e quem curtiu.
+5. Na home (`/inicio`), curte ou passa nos cards. Curtida dos dois lados vira match (`/matches`). Quem foi curtido não volta ao deck; quem foi passado reaparece depois de 7 dias.
+6. Qualquer pessoa posta quantos stories quiser. O dono vê quem viu e quem curtiu.
 7. Quem deu match conversa pelo chat do app (`/conversas/[id]`), sem precisar do Pro.
-8. Ver e curtir stories de outras pessoas, o botão de WhatsApp, as métricas do perfil e a lista de quem curtiu (`/curtidas`) são do Pro (`/pro`).
+8. Stories (ver e curtir), as métricas do perfil e a lista de quem curtiu (`/curtidas`) são de graça. O Pro (`/pro`) vende só o botão de WhatsApp.
 9. Em `/eventos`, qualquer pessoa cria eventos e confirma presença nos eventos dos outros.
+10. O admin cadastra anúncios em `/admin/anuncios`. Eles entram entre os cards do deck, um a cada `ADS_EVERY` pessoas. Quem é Pro não recebe nenhum.
 
 ## Rodando localmente
 
@@ -62,15 +63,15 @@ O app abre em <http://localhost:3000> e o admin entra por `/entrar`.
 
 Rode `npm test` a cada mudança e `npm run test:e2e` antes de publicar. Toda correção de bug deve entrar com um teste que falharia sem ela.
 
-- **Banco** (`scripts/test-migration.ts`): limite de stories, quem vê o quê, métricas do Pro, preferências, chat, eventos e acesso direto às tabelas.
+- **Banco** (`scripts/test-migration.ts`): repetição no deck, quem vê o quê nos stories, métricas, anúncios, preferências, chat, eventos e acesso direto às tabelas.
 - **Ponta a ponta** (`tests/e2e/regression.mjs`): do cadastro na LP ao cancelamento do Pro, passando por stories, métricas, chat, eventos e PWA.
 
-A regressão precisa do Google Chrome instalado. Ela usa as migrations reais num Postgres em memória, com Supabase e AbacatePay simulados em `tests/e2e/fake-backend.mjs`, e gera o build em `.next-e2e`. Nada toca os serviços de verdade. As capturas de tela ficam em `tests/e2e/.output/shots`.
+A regressão usa o Chromium do Playwright: instale uma vez com `npx playwright-core install chromium`. Ela usa as migrations reais num Postgres em memória, com Supabase e AbacatePay simulados em `tests/e2e/fake-backend.mjs`, e gera o build em `.next-e2e`. Nada toca os serviços de verdade. As capturas de tela ficam em `tests/e2e/.output/shots`.
 
 ## AbacatePay
 
 1. Crie na loja um produto de assinatura mensal e coloque o id em `ABACATEPAY_PRO_PRODUCT_ID`.
-2. Gere uma chave com permissão `SUBSCRIPTION:DELETE`, necessária para o cancelamento.
+2. Gere uma chave com as permissões `SUBSCRIPTION:CREATE` (para abrir o checkout) e `SUBSCRIPTION:DELETE` (para o cancelamento). Sem a primeira, `/subscriptions/create` responde 401/403 e o checkout não abre.
 3. Cadastre o webhook apontando para a URL abaixo, com os eventos de assinatura e de checkout:
 
 ```text
@@ -82,6 +83,27 @@ Use o mesmo segredo em `ABACATEPAY_WEBHOOK_SECRET`.
 No Dev mode, o cartão `4242 4242 4242 4242` é aprovado. Teste com ele antes de ir para produção, porque a documentação não descreve o formato completo do evento de assinatura. Eventos que não casam com nenhuma assinatura ficam em `payment_events` com `processed_at` nulo, para conferência.
 
 O cancelamento no AbacatePay é imediato e irreversível, e a tela do Pro avisa isso antes de confirmar. Para demonstrações, o admin libera o Pro sem cobrança na aba Ativos.
+
+## Anúncios
+
+O admin cadastra em `/admin/anuncios`: imagem, título, mini descrição e link. Curtir o card,
+tocar na imagem ou usar o botão Abrir leva ao link, que precisa ser `https://`.
+
+**A imagem precisa ser 1080x1800 px (3:5).** O card do deck não tem proporção fixa: ele é
+`flex-1` numa coluna `h-dvh`, então a altura depende do aparelho e das safe areas, e a
+proporção varia de ~0,60 (iPhone 15 Pro Max no navegador) a ~0,87 (iPhone SE). Por isso:
+
+- Mantenha logo, rosto e texto na **faixa central**. As bordas de cima e de baixo (~280px cada)
+  podem ser cortadas, dependendo do aparelho.
+- O terço de baixo fica sob o degradê com o título e a descrição. Não coloque texto ali.
+- O formulário avisa quando a proporção enviada não é 3:5, mas não bloqueia.
+
+O limite de redimensionamento é `MAX_AD_EDGE` (1800), separado do `MAX_PHOTO_EDGE` das fotos de
+perfil: com o teto de 1440 a imagem 3:5 chegaria em 864px de largura e ficaria mole no celular.
+
+Métricas ficam em `ad_events`. A exibição é **única por anúncio/pessoa/dia** (índice único
+parcial), para a tabela não crescer sem limite; o clique conta todas as vezes. Excluir um
+anúncio leva os eventos junto, então para guardar o histórico o admin pausa em vez de excluir.
 
 ## PWA
 

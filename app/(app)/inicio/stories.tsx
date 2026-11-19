@@ -1,9 +1,8 @@
 "use client";
 
-import { LoaderCircle, Lock, Plus } from "lucide-react";
+import { LoaderCircle, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useLayoutEffect, useState, type ChangeEvent } from "react";
-import { ProSheet, type ProReason } from "@/components/pro-sheet";
 import { MediaError, uploadPhoto, uploadVideo, VIDEO_ACCEPT } from "@/lib/media-upload";
 import type { StoryPerson } from "@/lib/types";
 import { publishStory } from "./actions";
@@ -17,12 +16,10 @@ function StoryRing({
   label,
   photoUrl,
   active,
-  children,
 }: {
   label: string;
   photoUrl: string | null;
   active: boolean;
-  children?: React.ReactNode;
 }) {
   return (
     <span
@@ -33,7 +30,6 @@ function StoryRing({
       <span className="flex size-14 items-center justify-center overflow-hidden rounded-full border-2 border-ink bg-raised font-display text-lg font-semibold text-cream">
         {photoUrl ? <img src={photoUrl} alt="" className="size-full object-cover" /> : label.charAt(0)}
       </span>
-      {children}
     </span>
   );
 }
@@ -42,28 +38,15 @@ function StoryLabel({ children }: { children: React.ReactNode }) {
   return <span className="mt-1 block truncate text-center text-xs text-cream">{children}</span>;
 }
 
-// Quem é free vê o cadeado. Quem é Pro abre o story, ou o perfil de quem não postou nada.
-export function Stories({
-  people,
-  own,
-  isPro,
-  canPost,
-}: {
-  people: StoryItem[];
-  own: StoryPerson;
-  isPro: boolean;
-  canPost: boolean;
-}) {
-  const [paywall, setPaywall] = useState<ProReason | null>(null);
+// Story é de todo mundo: abre o de quem postou, ou o perfil de quem não postou nada.
+export function Stories({ people, own }: { people: StoryItem[]; own: StoryPerson }) {
   const [viewing, setViewing] = useState<StoryPerson | null>(null);
   const [posting, setPosting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const closePaywall = useCallback(() => setPaywall(null), []);
   const closeViewer = useCallback(() => setViewing(null), []);
 
   useLayoutEffect(
     () => () => {
-      setPaywall(null);
       setViewing(null);
       setNotice(null);
     },
@@ -112,54 +95,37 @@ export function Stories({
               <StoryRing label={own.label} photoUrl={own.photoUrl} active={false} />
             )}
 
-            {canPost && (
-              <label
-                className={`absolute cursor-pointer ${hasOwnStory ? "right-0 bottom-0 size-6" : "inset-0"}`}
-              >
-                <input
-                  type="file"
-                  accept={`image/*,${VIDEO_ACCEPT}`}
-                  disabled={posting}
-                  onChange={handlePick}
-                  aria-label="Postar story"
-                  className="sr-only"
-                />
-                <span className="absolute -right-0.5 -bottom-0.5 flex size-5 items-center justify-center rounded-full border-2 border-ink bg-coral text-ink">
-                  {posting ? (
-                    <LoaderCircle className="size-2.5 animate-spin" aria-label="Postando" />
-                  ) : (
-                    <Plus className="size-3" aria-hidden />
-                  )}
-                </span>
-              </label>
-            )}
+            <label
+              className={`absolute cursor-pointer ${hasOwnStory ? "right-0 bottom-0 size-6" : "inset-0"}`}
+            >
+              <input
+                type="file"
+                accept={`image/*,${VIDEO_ACCEPT}`}
+                disabled={posting}
+                onChange={handlePick}
+                aria-label="Postar story"
+                className="sr-only"
+              />
+              <span className="absolute -right-0.5 -bottom-0.5 flex size-5 items-center justify-center rounded-full border-2 border-ink bg-coral text-ink">
+                {posting ? (
+                  <LoaderCircle className="size-2.5 animate-spin" aria-label="Postando" />
+                ) : (
+                  <Plus className="size-3" aria-hidden />
+                )}
+              </span>
+            </label>
           </div>
           <StoryLabel>{OWN_LABEL}</StoryLabel>
         </li>
 
         {people.map((person) => {
           const ring = (
-            <StoryRing label={person.label} photoUrl={person.photoUrl} active={person.hasStory}>
-              {!isPro && (
-                <span className="absolute -right-0.5 -bottom-0.5 flex size-5 items-center justify-center rounded-full border-2 border-ink bg-cream text-ink">
-                  <Lock className="size-2.5" aria-hidden />
-                </span>
-              )}
-            </StoryRing>
+            <StoryRing label={person.label} photoUrl={person.photoUrl} active={person.hasStory} />
           );
 
           return (
             <li key={person.id} className="w-15 shrink-0">
-              {!isPro ? (
-                <button
-                  type="button"
-                  aria-label={`Story de ${person.label}, recurso Pro`}
-                  onClick={() => setPaywall("stories")}
-                  className="block w-full"
-                >
-                  {ring}
-                </button>
-              ) : person.stories.length > 0 ? (
+              {person.stories.length > 0 ? (
                 <button
                   type="button"
                   aria-label={`Ver story de ${person.label}`}
@@ -185,15 +151,8 @@ export function Stories({
         </p>
       )}
 
-      <ProSheet reason={paywall} onClose={closePaywall} />
-
       {viewing && (
-        <StoryViewer
-          person={viewing}
-          isOwn={viewing.id === own.id}
-          isPro={isPro}
-          onClose={closeViewer}
-        />
+        <StoryViewer person={viewing} isOwn={viewing.id === own.id} onClose={closeViewer} />
       )}
     </>
   );

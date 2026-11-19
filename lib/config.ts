@@ -4,7 +4,7 @@ export const APP_DESCRIPTION =
   "Um lugar para jovens cristãos se conhecerem com calma e intenção.";
 
 // Só exibição. O valor cobrado é o do produto cadastrado na loja do AbacatePay.
-export const PRO_PRICE_LABEL = "R$ 29,97 por mês";
+export const PRO_PRICE_LABEL = "R$ 9,97 por mês";
 
 export const THEME_COLOR = "#0d0a0b";
 
@@ -20,6 +20,19 @@ export const SIGNED_URL_TTL_SECONDS = 60 * 60;
 export const DECK_SIZE = 20;
 export const STORY_COUNT = 12;
 export const STORY_TTL_HOURS = 24;
+
+// Anúncios: um card de anúncio a cada ADS_EVERY cards de pessoa. Quem é Pro não recebe nenhum.
+export const ADS_EVERY = 3;
+// Quantos anúncios buscar por carga. Mais que o necessário para o deck rotacionar sem repetir.
+export const ADS_PER_DECK = 8;
+export const MAX_AD_TITLE = 60;
+export const MAX_AD_DESCRIPTION = 140;
+// A imagem do anúncio sangra no card, que não tem proporção fixa: a altura depende do
+// aparelho e das safe areas. Peça 1080x1800 (3:5) e mantenha o essencial na faixa central.
+// O teto é maior que o das fotos de perfil para a imagem não chegar em 864px e ficar mole.
+export const AD_IMAGE_WIDTH = 1080;
+export const AD_IMAGE_HEIGHT = 1800;
+export const MAX_AD_EDGE = 1800;
 
 export const MAX_HOBBIES = 3;
 

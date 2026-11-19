@@ -31,7 +31,8 @@ async function sql(query) {
   return response.json();
 }
 
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+// Chromium do próprio Playwright: não depende do Chrome instalado na máquina.
+const browser = await chromium.launch({ headless: true });
 
 const mobile = {
   viewport: { width: 390, height: 844 },
@@ -279,13 +280,14 @@ check(
 const storyCount = await user.getByRole("list", { name: "Stories" }).getByRole("listitem").count();
 check("stories aparecem", storyCount > 0, storyCount);
 
-await user.getByRole("list", { name: "Stories" }).getByRole("button", { name: /recurso Pro/ }).first().click();
-await user.getByText("Stories são do Pro").waitFor();
+// Stories saíram do Pro: ninguém mais vê cadeado nem paywall no carrossel.
+const lockedStories = await user
+  .getByRole("list", { name: "Stories" })
+  .getByRole("button", { name: /recurso Pro/ })
+  .count();
+check("free não vê mais paywall de story", lockedStories === 0, lockedStories);
 await user.waitForTimeout(400);
-await shot(user, "10-paywall-stories");
-await user.keyboard.press("Escape");
-await user.getByText("Stories são do Pro").waitFor({ state: "hidden" });
-check("story bloqueado abre o paywall e não abre story", user.url().endsWith("/inicio"));
+await shot(user, "10-stories-free");
 
 // Arrasto com o ponteiro.
 const card = user.getByRole("article");
@@ -328,7 +330,8 @@ async function dismissMatch() {
     await matchPaywall.getByRole("button", { name: "Fechar" }).click();
     await matchPaywall.waitFor({ state: "hidden" });
   }
-  await user.getByRole("button", { name: "Continuar" }).click();
+  // O overlay entra animado e o Playwright só clica sozinho no que está parado.
+  await user.getByRole("button", { name: "Continuar" }).click({ force: true });
   await user.waitForTimeout(350);
   return true;
 }
@@ -346,16 +349,14 @@ async function likeCards(total) {
 await likeCards(3);
 check("curtidas recíprocas viram match", matches >= 1, matches);
 
-await card.waitFor();
-check("depois da última pessoa, o deck recomeça", await card.isVisible());
-await shot(user, "13-deck-recomeca");
-
-const matchesBefore = matches;
-await likeCards(4);
-check("curtir de novo não repete o match", matches === matchesBefore, { matches, matchesBefore });
+// O arrasto mais as 3 curtidas cobrem as 4 pessoas compatíveis do seed.
+// Quem já foi swipado não volta, então o deck acaba em vez de recomeçar.
+await user.getByRole("heading", { name: "Por agora, é só" }).waitFor();
+check("depois da última pessoa, o deck acaba em vez de repetir", true);
+await shot(user, "13-deck-acabou");
 
 const swipes = await sql(`select count(*)::int as n from swipes where swiper_id='${userId}'`);
-check("rever pessoas não duplica os swipes", swipes[0].n === 4, swipes);
+check("cada pessoa aparece uma vez só", swipes[0].n === 4, swipes);
 
 // ---- matches e perfil
 await user.getByRole("link", { name: "Matches" }).click();
@@ -679,23 +680,24 @@ await user.goto(`${APP}/inicio`);
 await storyInput.setInputFiles(photoPath);
 await ownStoryButton.waitFor();
 check("free posta o story do dia", (await countRows(`stories where user_id='${userId}'`)) === 1);
-check("free não vê como postar o segundo", (await storyInput.count()) === 0);
+check("free pode postar outro story no mesmo dia", (await storyInput.count()) === 1);
 await shot(user, "30-story-postado");
 
 await ownStoryButton.click();
 await ownViewer.getByRole("button", { name: /Visto por 0/ }).waitFor();
 check("dono abre o próprio story", await ownViewer.locator("img").first().isVisible());
-check("free vê o aviso do limite", await ownViewer.getByText("1 story por dia").isVisible());
+check("não há mais aviso de limite de story", (await ownViewer.getByText("1 story por dia").count()) === 0);
 await shot(user, "31-story-proprio");
 await user.keyboard.press("Escape");
 await ownViewer.waitFor({ state: "hidden" });
 
 const { page: lia } = await createMember("lia", "Lia", "female", false);
 const storyPath = (await sql(`select media_path from stories where user_id='${userId}'`))[0].media_path;
-await lia.getByRole("button", { name: "Story de Jotinha, recurso Pro" }).click();
-await lia.getByText("Stories são do Pro").waitFor();
-check("free não abre story de outra pessoa", (await lia.getByRole("dialog", { name: "Story de Jotinha" }).count()) === 0);
-check("a mídia do story não chega a quem é free", !(await lia.content()).includes(storyPath));
+// A Lia é free e mesmo assim recebe o story e a mídia. Ela não abre de propósito:
+// quem conta a visualização e a curtida logo abaixo é a Bia, e a contagem precisa ficar em 1.
+await lia.getByRole("button", { name: "Ver story de Jotinha" }).waitFor();
+check("free recebe o story de outra pessoa", (await lia.getByRole("button", { name: "Ver story de Jotinha" }).count()) === 1);
+check("free não vê paywall no story de outra pessoa", (await lia.getByRole("button", { name: /recurso Pro/ }).count()) === 0);
 
 const { page: bia } = await createMember("bia", "Bia", "female", true);
 const biaViewer = bia.getByRole("dialog", { name: "Story de Jotinha" });
@@ -762,25 +764,18 @@ await bia.reload();
 await bia.getByRole("heading", { name: /Jotinha/ }).waitFor();
 check("visita ao perfil conta uma vez por dia", (await countRows(`profile_views where profile_id='${userId}'`)) === 1);
 
-await user.goto(`${APP}/perfil/${userId}`);
-const lockedStats = user.getByRole("link", { name: /visitas e curtidas/ });
-await lockedStats.waitFor();
-check("free vê as métricas bloqueadas", (await user.getByRole("region", { name: "Métricas do perfil" }).count()) === 0);
-check("visitar o próprio perfil não conta", (await countRows(`profile_views where profile_id='${userId}' and viewer_id='${userId}'`)) === 0);
-
-await user.goto(`${APP}/curtidas`);
-await user.waitForURL("**/pro");
-check("free não abre quem curtiu", user.url().endsWith("/pro"));
-
-await sql(`update profiles set is_pro = true where id='${userId}'`);
+// Métricas e quem te curtiu saíram do Pro: o free vê as duas coisas, sem upsell.
 await user.goto(`${APP}/perfil/${userId}`);
 const statsCard = user.getByRole("region", { name: "Métricas do perfil" });
 await statsCard.waitFor();
+check("free vê as métricas do perfil", true);
+check("não há mais upsell de métricas", (await user.getByRole("link", { name: /visitas e curtidas/ }).count()) === 0);
+check("visitar o próprio perfil não conta", (await countRows(`profile_views where profile_id='${userId}' and viewer_id='${userId}'`)) === 0);
 await shot(user, "34-metricas");
 const likesReceived = await countRows(`swipes where target_id='${userId}' and action='like'`);
 const statsText = await statsCard.innerText();
-check("Pro vê as visitas", /1\s*Visitas ao perfil/.test(statsText), statsText);
-check("Pro vê as curtidas", new RegExp(`${likesReceived}\\s*Curtidas`).test(statsText), { statsText, likesReceived });
+check("free vê as visitas", /1\s*Visitas ao perfil/.test(statsText), statsText);
+check("free vê as curtidas", new RegExp(`${likesReceived}\\s*Curtidas`).test(statsText), { statsText, likesReceived });
 
 await statsCard.getByRole("link").click();
 await user.waitForURL("**/curtidas");
@@ -788,8 +783,11 @@ await user.getByRole("heading", { name: "Quem te curtiu" }).waitFor();
 // A rota anterior fica oculta no DOM, e só os links visíveis são da tela atual.
 const likerLinks = user.locator('main a[href^="/perfil/"]:visible');
 await likerLinks.first().waitFor();
-check("Pro vê quem curtiu", (await likerLinks.count()) === likesReceived, { likesReceived });
+check("free vê quem curtiu", (await likerLinks.count()) === likesReceived, { likesReceived });
 await shot(user, "35-quem-curtiu");
+
+// O Pro agora só serve para o WhatsApp: é o único lugar que ainda pede assinatura.
+await sql(`update profiles set is_pro = true where id='${userId}'`);
 
 // Quem é Pro chama direto do match.
 await sql(`delete from swipes where swiper_id='${userId}'`);
@@ -947,6 +945,93 @@ await sql(`update profiles set is_pro = false where id='${userId}'`);
   check("deck mostra só quem combina", (await user.getByRole("article").getAttribute("aria-label")).startsWith("Aninha"));
 
   await sql(`update profiles set pref_churches = '{}', pref_skin_colors = '{}' where id='${userId}'`);
+}
+
+// ---- anúncios
+{
+  // Cadastra pelo formulário do admin: é o caminho real, com o upload pela service role.
+  // O navegador não consegue subir para a pasta ads/ (a RLS exige a pasta do próprio usuário).
+  await admin.goto(`${APP}/admin/anuncios`);
+  await admin.getByPlaceholder("Título").fill("Curso de louvor");
+  await admin.getByPlaceholder("Mini descrição").fill("Aulas toda semana na sua cidade");
+  await admin.getByPlaceholder(/wa\.me/).fill("https://wa.me/5511999990000");
+  await admin.getByLabel("Imagem do anúncio").setInputFiles(photoPath);
+
+  // A fixture é 1800x2400 (3:4), fora do 3:5 que o card espera: o aviso tem de aparecer.
+  await admin.getByText("Essa proporção não é 3:5").waitFor();
+  check("o formulário avisa quando a proporção corta a imagem", true);
+  await shot(admin, "44-admin-anuncio");
+
+  await admin.getByRole("button", { name: "Publicar anúncio" }).click();
+  await admin.getByRole("button", { name: "Pausar" }).waitFor();
+  check("admin publica o anúncio", (await countRows("ads where active")) === 1);
+
+  const ad = (await sql("select id, image_path from ads"))[0];
+  const stored = await (await fetch(`${BACKEND}/__files`)).json();
+  check(
+    "a imagem do anúncio vai para o Storage",
+    stored.some((key) => key.endsWith(ad.image_path)),
+    ad.image_path,
+  );
+
+  // 4 pessoas no deck e um anúncio a cada 3: o anúncio é o quarto card.
+  await user.goto(`${APP}/inicio`);
+  await user.getByRole("article").waitFor();
+  for (let skipped = 0; skipped < 3; skipped += 1) {
+    await user.getByRole("button", { name: "Passar" }).click();
+    await user.waitForTimeout(650);
+  }
+
+  const adCard = user.getByRole("article", { name: "Anúncio: Curso de louvor" });
+  await adCard.waitFor();
+  await adCard.getByText("Patrocinado").waitFor();
+  check("o anúncio entra entre os cards de pessoa", true);
+  await user.waitForTimeout(400);
+  await shot(user, "45-anuncio-no-deck");
+
+  check("a exibição é registrada", await waitForRows("ad_events where kind = 'impression'", 1));
+
+  const href = await adCard.getByRole("link", { name: /^Abrir / }).getAttribute("href");
+  check("o botão leva ao link do anunciante", href === "https://wa.me/5511999990000", href);
+
+  // Anúncio não tem linha em profiles: se o deck chamasse o record_swipe aqui, a pessoa
+  // veria "Não deu para salvar sua última escolha" e o swipe não entraria.
+  const swipesBefore = await countRows(`swipes where swiper_id='${userId}'`);
+  await user.getByRole("button", { name: "Passar" }).click();
+  await user.waitForTimeout(900);
+  check(
+    "passar no anúncio não tenta gravar swipe",
+    (await countRows(`swipes where swiper_id='${userId}'`)) === swipesBefore,
+    swipesBefore,
+  );
+  check(
+    "passar no anúncio não mostra erro",
+    (await user.getByText("Não deu para salvar sua última escolha.").count()) === 0,
+  );
+
+  // O corte do Pro é no servidor: o active_ads devolve lista vazia para quem assina.
+  await sql(`update profiles set is_pro = true where id='${userId}'`);
+  await sql(`delete from swipes where swiper_id='${userId}'`);
+  await user.goto(`${APP}/inicio`);
+  await user.getByRole("article").waitFor();
+  for (let skipped = 0; skipped < 3; skipped += 1) {
+    await user.getByRole("button", { name: "Passar" }).click();
+    await user.waitForTimeout(650);
+  }
+  check(
+    "Pro não vê anúncio no deck",
+    (await user.getByRole("article", { name: /^Anúncio:/ }).count()) === 0,
+  );
+  await sql(`update profiles set is_pro = false where id='${userId}'`);
+
+  // O relatório do admin soma o que foi registrado.
+  await admin.reload();
+  await admin.getByText(/1 alcance · 0 cliques/).waitFor();
+  check("o painel mostra alcance e cliques do anúncio", true);
+
+  await admin.getByRole("button", { name: "Pausar" }).click();
+  await admin.getByRole("button", { name: "Ativar" }).waitFor();
+  check("admin pausa o anúncio", (await countRows("ads where active")) === 0);
 }
 
 for (const { context } of Object.values(members)) await context.close();

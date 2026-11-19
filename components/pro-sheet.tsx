@@ -1,18 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Crown, MessageCircle, Sparkles } from "lucide-react";
+import { Crown, MessageCircle } from "lucide-react";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { PRO_PRICE_LABEL } from "@/lib/config";
 
-export type ProReason = "stories" | "whatsapp";
+// O Pro vende só o contato no WhatsApp: o resto do app é de graça.
+export type ProReason = "whatsapp";
 
 const COPY = {
-  stories: {
-    title: "Stories são do Pro",
-    text: "Com o Pro, você vê e curte os stories de quem te interessa.",
-    icon: Sparkles,
-  },
   whatsapp: {
     title: "WhatsApp é do Pro",
     text: "Assine para chamar no WhatsApp direto do perfil.",

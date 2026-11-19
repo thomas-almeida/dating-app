@@ -117,6 +117,14 @@ async function testCompatibility() {
   const clearPrefs = () =>
     db.query("update public.profiles set pref_genders = '{}', pref_churches = '{}', pref_skin_colors = '{}'");
 
+  // Aqui o assunto são os filtros, não a repetição: o deck esconde quem a Ana já swipou,
+  // então os swipes dela saem de cena e voltam no fim, porque o chat depende do match.
+  const anaSwipes = await db.query<{ target_id: string; action: string; created_at: Date }>(
+    "select target_id, action, created_at from public.swipes where swiper_id = $1",
+    [ids.ana],
+  );
+  await db.query("delete from public.swipes where swiper_id = $1", [ids.ana]);
+
   const usual = await deckOf(ids.ana);
   check("sem preferência continua o sexo oposto", usual.length === 2 && usual.includes(ids.bruno) && usual.includes(ids.carlos), usual);
 
@@ -170,6 +178,13 @@ async function testCompatibility() {
   await as(ids.ana, "update public.profiles set height_cm = 168, skin_color = 'branca' where id = $1", [ids.ana]);
   const own = await as(ids.ana, "select height_cm, skin_color from public.profiles where id = $1", [ids.ana]);
   check("usuário grava altura e cor", own[0]?.height_cm === 168 && own[0]?.skin_color === "branca", own);
+
+  for (const swipe of anaSwipes.rows) {
+    await db.query(
+      "insert into public.swipes (swiper_id, target_id, action, created_at) values ($1, $2, $3, $4)",
+      [ids.ana, swipe.target_id, swipe.action, swipe.created_at],
+    );
+  }
 }
 
 async function testChat() {
@@ -272,8 +287,12 @@ async function testDeck() {
      values ($1::uuid, 'Dora', 'Dorinha', 'Oi', 'female', '2001-03-03', array[$1::text || '/d.jpg'])`,
     [ids.dora],
   );
-  const order = await as(ids.bruno, "select id from public.discover_profiles()");
-  check("descoberta mostra primeiro quem não foi visto", order[0]?.id === ids.dora && order.length === 2, order);
+  const order = await as<{ id: string }>(ids.bruno, "select id from public.discover_profiles()");
+  check(
+    "descoberta mostra quem não foi visto e esconde quem já foi curtido",
+    order.length === 1 && order[0]?.id === ids.dora,
+    order,
+  );
 
   const relike = await as<{ m: boolean }>(ids.bruno, "select public.record_swipe($1, 'like') as m", [ids.ana]);
   check("curtir de novo não repete o match", relike[0].m === false, relike);
@@ -284,6 +303,41 @@ async function testDeck() {
   check("curtir depois de passar é match de novo", back[0].m === true, back);
   const swipes = await db.query<{ n: number }>("select count(*)::int as n from public.swipes where swiper_id = $1 and target_id = $2", [ids.bruno, ids.ana]);
   check("rever não duplica o swipe", swipes.rows[0].n === 1, swipes.rows);
+
+  // Repetição: quem foi passado volta depois de 7 dias, quem foi curtido não volta.
+  const deckOfBruno = () =>
+    as<{ id: string }>(ids.bruno, "select id from public.discover_profiles()");
+  const agePass = (interval: string) =>
+    db.query(
+      `update public.swipes set created_at = now() - interval '${interval}' where swiper_id = $1 and target_id = $2`,
+      [ids.bruno, ids.dora],
+    );
+
+  await as(ids.bruno, "select public.record_swipe($1, 'pass')", [ids.dora]);
+  const justPassed = await deckOfBruno();
+  check("quem acabou de ser passado sai do deck", !justPassed.some(({ id }) => id === ids.dora), justPassed);
+
+  await agePass("3 days");
+  const tooSoon = await deckOfBruno();
+  check("com 3 dias ainda não repete", !tooSoon.some(({ id }) => id === ids.dora), tooSoon);
+
+  await agePass("8 days");
+  const backAgain = await deckOfBruno();
+  check("depois de 7 dias quem foi passado volta", backAgain.some(({ id }) => id === ids.dora), backAgain);
+
+  await db.query(
+    "update public.swipes set created_at = now() - interval '30 days' where swiper_id = $1 and target_id = $2",
+    [ids.bruno, ids.ana],
+  );
+  const likedGone = await deckOfBruno();
+  check("quem foi curtido não volta nem depois de 30 dias", !likedGone.some(({ id }) => id === ids.ana), likedGone);
+
+  // Devolve o estado que os próximos testes esperam.
+  await db.query(
+    "update public.swipes set created_at = now() where swiper_id = $1 and target_id = $2",
+    [ids.bruno, ids.ana],
+  );
+  await db.query("delete from public.swipes where swiper_id = $1 and target_id = $2", [ids.bruno, ids.dora]);
 }
 
 async function testStories() {
@@ -291,21 +345,21 @@ async function testStories() {
     as<{ id: string }>(uid, "select public.post_story($1, 'image') as id", [path]);
   const feed = (uid: string) => as<{ id: string; user_id: string }>(uid, "select * from public.story_feed()");
 
-  // Limite
+  // Postar: sem limite para ninguém, desde que os stories deixaram de ser do Pro.
   const [story] = await post(ids.ana, `${ids.ana}/s1.jpg`);
-  check("free posta o story do dia", Boolean(story?.id), story);
-  const limit = await errorOf(ids.ana, "select public.post_story($1, 'image')", [`${ids.ana}/s2.jpg`]);
-  check("free não posta o segundo no mesmo dia", limit === "story_limit", limit);
+  check("free posta story", Boolean(story?.id), story);
+  const [second] = await post(ids.ana, `${ids.ana}/s2.jpg`);
+  check("free posta o segundo no mesmo dia", Boolean(second?.id), second);
 
-  await db.query("update public.stories set created_at = now() - interval '25 hours' where user_id = $1", [ids.ana]);
+  // Só o primeiro vence: o resto do teste usa `next` como o story vivo da Ana.
+  await db.query("update public.stories set created_at = now() - interval '25 hours' where id = $1", [story.id]);
   const [next] = await post(ids.ana, `${ids.ana}/s3.jpg`);
-  check("depois de 24 horas o free posta de novo", Boolean(next?.id), next);
+  check("free segue postando depois de 24 horas", Boolean(next?.id), next);
 
-  await db.query("update public.profiles set is_pro = true where id = $1", [ids.bruno]);
   await post(ids.bruno, `${ids.bruno}/s1.jpg`);
   await post(ids.bruno, `${ids.bruno}/s2.jpg`);
-  const proStories = await feed(ids.bruno);
-  check("Pro posta sem limite", proStories.filter(({ user_id }) => user_id === ids.bruno).length === 2, proStories);
+  const brunoStories = await feed(ids.bruno);
+  check("free posta vários no mesmo dia", brunoStories.filter(({ user_id }) => user_id === ids.bruno).length === 2, brunoStories);
 
   const foreign = await errorOf(ids.carlos, "select public.post_story($1, 'image')", [`${ids.ana}/alheio.jpg`]);
   check("não posta arquivo de outra pessoa", foreign === "foreign_media", foreign);
@@ -324,19 +378,16 @@ async function testStories() {
   await denied("membro não forja visualização", ids.ana, "insert into public.story_views (story_id, viewer_id) values ($1, $2)", [next.id, ids.ana]);
   await denied("regra interna não é pública", ids.ana, "select public.can_view_story($1)", [next.id]);
 
-  // Quem vê o quê
+  // Quem vê o quê: só a compatibilidade decide, o Pro não entra mais nisso.
   const freeFeed = await feed(ids.ana);
-  check("free recebe só o próprio story", freeFeed.length === 1 && freeFeed[0].user_id === ids.ana, freeFeed);
+  check("free recebe o próprio story", freeFeed.some(({ user_id }) => user_id === ids.ana), freeFeed);
   const carlosFeed = await feed(ids.carlos);
-  check("free não recebe stories de ninguém", carlosFeed.length === 0, carlosFeed);
-  const proFeed = await feed(ids.bruno);
-  check("Pro recebe stories do sexo oposto", proFeed.some(({ user_id }) => user_id === ids.ana), proFeed);
-  check("story vencido sai do feed", !proFeed.some(({ id }) => id === story.id), proFeed);
+  check("free recebe stories do sexo oposto", carlosFeed.some(({ user_id }) => user_id === ids.ana), carlosFeed);
+  const brunoFeed = await feed(ids.bruno);
+  check("story vencido sai do feed", !brunoFeed.some(({ id }) => id === story.id), brunoFeed);
 
-  await db.query("update public.profiles set is_pro = true where id = $1", [ids.carlos]);
   const sameGender = await feed(ids.carlos);
-  check("Pro não recebe stories do mesmo sexo", !sameGender.some(({ user_id }) => user_id === ids.bruno), sameGender);
-  await db.query("update public.profiles set is_pro = false where id = $1", [ids.carlos]);
+  check("ninguém recebe stories do mesmo sexo", !sameGender.some(({ user_id }) => user_id === ids.bruno), sameGender);
 
   const row = await as<{ has_story: boolean; id: string }>(ids.bruno, "select * from public.story_profiles()");
   check("quem tem story vem primeiro", row[0]?.id === ids.ana && row[0]?.has_story === true, row);
@@ -347,7 +398,12 @@ async function testStories() {
   await as(ids.bruno, "select public.view_story($1)", [next.id]);
   await as(ids.bruno, "select public.view_story($1)", [next.id]);
   const audience = await as<{ user_id: string; liked: boolean }>(ids.ana, "select * from public.story_audience($1)", [next.id]);
-  check("dono vê quem viu, uma vez por pessoa", audience.length === 1 && audience[0].user_id === ids.bruno, audience);
+  const viewers = audience.map(({ user_id }) => user_id);
+  check(
+    "dono vê quem viu, uma vez por pessoa",
+    audience.length === 2 && viewers.includes(ids.bruno) && viewers.includes(ids.carlos),
+    audience,
+  );
 
   const toggle = () => as<{ liked: boolean }>(ids.bruno, "select public.toggle_story_like($1) as liked", [next.id]);
   check("curtir story", (await toggle())[0].liked === true);
@@ -359,8 +415,8 @@ async function testStories() {
   const likedFeed = await as<{ id: string; liked: boolean }>(ids.bruno, "select * from public.story_feed()");
   check("feed sabe o que já foi curtido", likedFeed.find(({ id }) => id === next.id)?.liked === true, likedFeed);
 
-  const freeLike = await errorOf(ids.carlos, "select public.toggle_story_like($1)", [next.id]);
-  check("free não curte story", freeLike === "invalid_story", freeLike);
+  const freeLike = await as<{ liked: boolean }>(ids.carlos, "select public.toggle_story_like($1) as liked", [next.id]);
+  check("free curte story", freeLike[0]?.liked === true, freeLike);
   const ownLike = await errorOf(ids.ana, "select public.toggle_story_like($1)", [next.id]);
   check("não curte o próprio story", ownLike === "invalid_story", ownLike);
 
@@ -370,8 +426,6 @@ async function testStories() {
   await db.query("update public.stories set created_at = now() - interval '25 hours' where id = $1", [next.id]);
   const expired = await errorOf(ids.bruno, "select public.toggle_story_like($1)", [next.id]);
   check("story vencido não recebe curtida", expired === "invalid_story", expired);
-
-  await db.query("update public.profiles set is_pro = false where id = $1", [ids.bruno]);
 }
 
 async function testInsights() {
@@ -387,22 +441,118 @@ async function testInsights() {
   await denied("membro não lê visitas direto", ids.ana, "select * from public.profile_views");
   await denied("anon não vê métricas", null, "select * from public.my_insights()");
 
-  const free = await as(ids.ana, "select * from public.my_insights()");
-  check("free não recebe métricas", free.length === 0, free);
-  const freeLikers = await as(ids.ana, "select * from public.my_likers()");
-  check("free não recebe quem curtiu", freeLikers.length === 0, freeLikers);
-
-  await db.query("update public.profiles set is_pro = true where id = $1", [ids.ana]);
+  // Métricas e quem te curtiu saíram do Pro: valem para qualquer membro.
   const insights = await as<{ profile_views: number | string; likes_received: number | string }>(ids.ana, "select * from public.my_insights()");
   check(
-    "Pro vê visitas e curtidas",
+    "free vê visitas e curtidas",
     Number(insights[0]?.profile_views) === 1 && Number(insights[0]?.likes_received) === 1,
     insights,
   );
   const likers = await as<{ id: string }>(ids.ana, "select * from public.my_likers()");
-  check("Pro vê quem curtiu", likers.length === 1 && likers[0].id === ids.bruno, likers);
+  check("free vê quem curtiu", likers.length === 1 && likers[0].id === ids.bruno, likers);
   check("quem curtiu não expõe birth_date", !("birth_date" in likers[0]), likers[0]);
+  const ghostInsights = await as(ids.intruso, "select * from public.my_insights()");
+  check("sem perfil não recebe métricas", ghostInsights.length === 0, ghostInsights);
+}
+
+async function testAds() {
+  const adId = "00000000-0000-4000-8000-0000000000a1";
+  const newAd = () =>
+    db.query(
+      `insert into public.ads (id, title, description, image_path, target_url)
+       values ($1, 'Curso de louvor', 'Aulas toda semana', 'ads/a.jpg', 'https://wa.me/5511999990000')`,
+      [adId],
+    );
+  const adsOf = (uid: string | null) =>
+    as<{ id: string }>(uid, "select id from public.active_ads()");
+  const countEvents = async (kind: string) =>
+    (
+      await db.query<{ n: number }>(
+        "select count(*)::int as n from public.ad_events where ad_id = $1 and kind = $2",
+        [adId, kind],
+      )
+    ).rows[0].n;
+
+  await newAd();
+
+  // Quem vê o quê
+  const free = await adsOf(ids.ana);
+  check("free recebe anúncio no deck", free.length === 1 && free[0].id === adId, free);
+
+  await db.query("update public.profiles set is_pro = true where id = $1", [ids.ana]);
+  const pro = await adsOf(ids.ana);
+  check("Pro não recebe anúncio", pro.length === 0, pro);
   await db.query("update public.profiles set is_pro = false where id = $1", [ids.ana]);
+
+  await db.query("update public.ads set active = false where id = $1", [adId]);
+  const paused = await adsOf(ids.ana);
+  check("anúncio pausado não aparece", paused.length === 0, paused);
+  await db.query("update public.ads set active = true where id = $1", [adId]);
+
+  const ghost = await adsOf(ids.intruso);
+  check("sem perfil, nada de anúncio", ghost.length === 0, ghost);
+
+  // Acesso direto
+  await denied("anon não lê anúncios", null, "select * from public.active_ads()");
+  await denied("membro não lê a tabela de anúncios", ids.ana, "select * from public.ads");
+  await denied("membro não lê os eventos de anúncio", ids.ana, "select * from public.ad_events");
+  await denied(
+    "membro não cadastra anúncio",
+    ids.ana,
+    "insert into public.ads (title, description, image_path, target_url) values ('x', 'y', 'ads/x.jpg', 'https://a.bc')",
+  );
+  await denied(
+    "membro não forja evento de anúncio",
+    ids.ana,
+    "insert into public.ad_events (ad_id, kind) values ($1, 'click')",
+    [adId],
+  );
+
+  // Um link javascript: aqui viraria execução de script no app.
+  let badUrl = false;
+  try {
+    await db.query(
+      `insert into public.ads (title, description, image_path, target_url)
+       values ('x', 'y', 'ads/x.jpg', 'javascript:alert(1)')`,
+    );
+  } catch {
+    badUrl = true;
+  }
+  check("link que não é https é recusado", badUrl);
+
+  // Métricas
+  await as(ids.ana, "select public.record_ad_event($1, 'impression')", [adId]);
+  await as(ids.ana, "select public.record_ad_event($1, 'impression')", [adId]);
+  check("exibição conta uma vez por pessoa por dia", (await countEvents("impression")) === 1);
+
+  await as(ids.bruno, "select public.record_ad_event($1, 'impression')", [adId]);
+  check("cada pessoa conta a própria exibição", (await countEvents("impression")) === 2);
+
+  await as(ids.ana, "select public.record_ad_event($1, 'click')", [adId]);
+  await as(ids.ana, "select public.record_ad_event($1, 'click')", [adId]);
+  check("clique conta todas as vezes", (await countEvents("click")) === 2);
+
+  await db.query("update public.ads set active = false where id = $1", [adId]);
+  await as(ids.ana, "select public.record_ad_event($1, 'click')", [adId]);
+  check("anúncio pausado não gera evento", (await countEvents("click")) === 2);
+  await db.query("update public.ads set active = true where id = $1", [adId]);
+
+  await denied(
+    "sem perfil não gera evento",
+    ids.intruso,
+    "select public.record_ad_event($1, 'click')",
+    [adId],
+  );
+  await denied(
+    "anon não gera evento",
+    null,
+    "select public.record_ad_event($1, 'click')",
+    [adId],
+  );
+
+  // Excluir leva as métricas: para guardar histórico, o admin pausa em vez de excluir.
+  await db.query("delete from public.ads where id = $1", [adId]);
+  check("excluir o anúncio leva as métricas", (await countEvents("click")) === 0);
 }
 
 async function run() {
@@ -484,7 +634,8 @@ async function run() {
   const pass = await as<{ m: boolean }>(ids.ana, "select public.record_swipe($1, 'pass') as m", [ids.carlos]);
   check("dispensar não é match", pass[0].m === false, pass);
   const afterSwipes = await as(ids.ana, "select * from public.discover_profiles()");
-  check("quem já passou volta para a descoberta", afterSwipes.length === 2, afterSwipes);
+  // O deck não repete na hora: a volta do "pass" depois de 7 dias é testada em testDeck.
+  check("quem acabou de ser swipado não volta para a descoberta", afterSwipes.length === 0, afterSwipes);
   const matches = await as(ids.ana, "select * from public.my_matches()");
   check("match aparece para os dois", matches.length === 1 && matches[0].id === ids.bruno, matches);
   await denied("não dá like em si", ids.ana, "select public.record_swipe($1, 'like')", [ids.ana]);
@@ -509,6 +660,7 @@ async function run() {
   await testStories();
   await testInsights();
   await testCompatibility();
+  await testAds();
   await testChat();
   await testEvents();
 

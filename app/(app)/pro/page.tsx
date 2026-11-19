@@ -1,12 +1,4 @@
-import {
-  ChevronDown,
-  Crown,
-  EighthNotes,
-  Eye,
-  HeartPlus,
-  MessageCircle,
-  UsersRound,
-} from "lucide-react";
+import { ChevronDown, Crown, MessageCircle, UsersRound } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { BackButton } from "@/components/back-button";
@@ -19,6 +11,7 @@ import { CancelForm, CheckoutForm, PaymentPending } from "./pro-forms";
 
 export const metadata: Metadata = { title: "Pro" };
 
+// O Pro é só o WhatsApp. Stories, quem te curtiu e as métricas são de graça para todo mundo.
 const BENEFITS = [
   {
     icon: MessageCircle,
@@ -27,28 +20,8 @@ const BENEFITS = [
   },
   {
     icon: UsersRound,
-    title: "Acompanhe seus likes",
-    text: "Veja o que está acontecendo com as pessoas que te interessaram.",
-  },
-  {
-    icon: HeartPlus,
-    title: "Dê likes sem limite",
-    text: "Não se preocupe com o número de likes: curta quem você quiser, sem restrições.",
-  },
-  {
-    icon: Eye,
-    title: "Veja quem te curtiu",
-    text: "Saiba quem curtiu você e não perca a chance de conhecer alguém especial.",
-  },
-  {
-    icon: MessageCircle,
     title: "Entre no grupo no WhatsApp",
     text: "Participe de grupos exclusivos com pessoas que compartilham seus interesses.",
-  },
-  {
-    icon: EighthNotes,
-    title: "Adicione músicas às suas fotos",
-    text: "Dê vida às suas fotos adicionando músicas que expressem sua personalidade e estilo.",
   },
 ];
 

@@ -1,4 +1,5 @@
 import {
+  MAX_AD_EDGE,
   MAX_PHOTO_EDGE,
   MAX_VIDEO_BYTES,
   MAX_VIDEO_SECONDS,
@@ -19,9 +20,9 @@ export const VIDEO_ACCEPT = Object.keys(VIDEO_EXTENSIONS).join(",");
 // A mensagem pode ir direto para a tela.
 export class MediaError extends Error {}
 
-async function shrinkPhoto(file: File): Promise<Blob> {
+async function shrinkImage(file: File, maxEdge: number): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_PHOTO_EDGE / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
@@ -75,7 +76,7 @@ async function upload(userId: string, file: Blob, extension: string, contentType
 }
 
 export async function uploadPhoto(userId: string, file: File) {
-  const blob = await shrinkPhoto(file);
+  const blob = await shrinkImage(file, MAX_PHOTO_EDGE);
   const path = await upload(userId, blob, "jpg", "image/jpeg");
   return { path, blob };
 }
@@ -94,4 +95,20 @@ export async function uploadVideo(userId: string, file: File) {
 
   const path = await upload(userId, file, extension, file.type);
   return { path, blob: file as Blob };
+}
+
+// Anúncio não sobe pelo navegador: a RLS do Storage exige que a pasta seja do próprio
+// usuário e que ele seja membro, e o admin pode não ter perfil. Aqui só redimensionamos;
+// quem grava é o server action, com a service role.
+export async function prepareAdImage(file: File) {
+  if (!file.type.startsWith("image/")) {
+    throw new MediaError("Envie uma imagem (JPG, PNG ou WebP).");
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const { width, height } = bitmap;
+  bitmap.close();
+
+  const blob = await shrinkImage(file, MAX_AD_EDGE);
+  return { blob, width, height };
 }

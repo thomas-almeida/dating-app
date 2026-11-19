@@ -1,9 +1,7 @@
 import {
   BadgeCheck,
-  ChevronRight,
   Eye,
   Heart,
-  Lock,
   MapPin,
   MessageCircle,
   Ruler,
@@ -34,18 +32,9 @@ const idSchema = z.uuid();
 
 type ProfileDetails = PublicProfile & { is_match: boolean };
 
+// As métricas são de todo mundo. Sem elas (erro na RPC), a seção some em vez de virar paywall.
 function StatsCard({ stats }: { stats: ProfileStats | null }) {
-  if (!stats) {
-    return (
-      <Link href="/pro" className="flex items-center gap-4 rounded-3xl bg-surface p-5">
-        <Lock className="size-5 shrink-0 text-coral" aria-hidden />
-        <span className="flex-1 text-sm leading-relaxed text-muted">
-          Veja quantas visitas e curtidas seu perfil teve com o Pro.
-        </span>
-        <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
-      </Link>
-    );
-  }
+  if (!stats) return null;
 
   return (
     <section aria-label="Métricas do perfil" className="grid grid-cols-2 gap-3">

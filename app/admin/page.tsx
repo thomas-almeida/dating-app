@@ -1,4 +1,4 @@
-import { LogOut, Smartphone } from "lucide-react";
+import { LogOut, Megaphone, Smartphone } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -119,6 +119,13 @@ export default function AdminPage({ searchParams }: PageProps<"/admin">) {
           <span className="text-sm text-muted">Painel</span>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/admin/anuncios"
+            className="flex h-10 items-center justify-center gap-2 rounded-full bg-surface px-4 text-sm font-semibold text-cream transition hover:bg-raised"
+          >
+            <Megaphone className="size-4" aria-hidden />
+            Anúncios
+          </Link>
           <form action={enterApp}>
             <button
               type="submit"

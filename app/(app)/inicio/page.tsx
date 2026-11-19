@@ -6,11 +6,12 @@ import { BottomNav } from "@/components/bottom-nav";
 import { GradientBackground } from "@/components/gradient-background";
 import { InstallPrompt } from "@/components/install-prompt";
 import { Wordmark } from "@/components/wordmark";
-import { DECK_SIZE, STORY_COUNT } from "@/lib/config";
+import { STORY_COUNT } from "@/lib/config";
+import { loadDeckItems } from "@/lib/deck-server";
 import { requireMember } from "@/lib/dal";
-import { signPaths, toDeckCards } from "@/lib/media";
+import { signPaths } from "@/lib/media";
 import { createClient } from "@/lib/supabase/server";
-import type { PublicProfile, StoryMedia, StoryProfile, StoryRow } from "@/lib/types";
+import type { StoryMedia, StoryProfile, StoryRow } from "@/lib/types";
 import { Deck } from "./deck";
 import { Stories } from "./stories";
 
@@ -20,13 +21,13 @@ async function Content() {
   const { user, profile, isAdmin } = await requireMember();
   const supabase = await createClient();
 
-  const [discovered, stories, feed] = await Promise.all([
-    supabase.rpc("discover_profiles", { p_limit: DECK_SIZE }),
+  // O deck já vem com os anúncios intercalados. Para quem é Pro, só pessoas.
+  const [items, stories, feed] = await Promise.all([
+    loadDeckItems(supabase, profile),
     supabase.rpc("story_profiles", { p_limit: STORY_COUNT }),
     supabase.rpc("story_feed"),
   ]);
 
-  if (discovered.error) console.error("discover_profiles", discovered.error);
   if (stories.error) console.error("story_profiles", stories.error);
   if (feed.error) console.error("story_feed", feed.error);
 
@@ -34,13 +35,10 @@ async function Content() {
   const feedRows = (feed.data ?? []) as StoryRow[];
   const avatarPath = profile.photo_paths[0];
 
-  const [cards, urls] = await Promise.all([
-    toDeckCards((discovered.data ?? []) as PublicProfile[], profile),
-    signPaths([
-      avatarPath,
-      ...storyProfiles.map((story) => story.photo_path),
-      ...feedRows.map((row) => row.media_path),
-    ]),
+  const urls = await signPaths([
+    avatarPath,
+    ...storyProfiles.map((story) => story.photo_path),
+    ...feedRows.map((row) => row.media_path),
   ]);
 
   const avatarUrl = avatarPath ? urls[avatarPath] : undefined;
@@ -95,8 +93,6 @@ async function Content() {
       </header>
 
       <Stories
-        isPro={profile.is_pro}
-        canPost={profile.is_pro || ownStories.length === 0}
         own={{
           id: user.id,
           label: profile.nickname ?? profile.name,
@@ -113,7 +109,7 @@ async function Content() {
       />
 
       <Deck
-        initialCards={cards}
+        initialItems={items ?? []}
         viewer={{
           name: profile.nickname ?? profile.name,
           photoUrl: avatarUrl ?? null,

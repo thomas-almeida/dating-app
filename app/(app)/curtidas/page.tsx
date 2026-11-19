@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { BackButton } from "@/components/back-button";
 import { BottomNav } from "@/components/bottom-nav";
@@ -12,8 +11,8 @@ import type { LikerProfile } from "@/lib/types";
 export const metadata: Metadata = { title: "Quem te curtiu" };
 
 async function LikerList() {
-  const { profile } = await requireMember();
-  if (!profile.is_pro) redirect("/pro");
+  // Quem te curtiu saiu do Pro: basta ser membro.
+  await requireMember();
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("my_likers");

@@ -143,6 +143,23 @@ export type MatchProfile = {
   matched_at: string;
 };
 
+// Anúncio como vem do banco.
+export type Ad = {
+  id: string;
+  title: string;
+  description: string;
+  image_path: string;
+  target_url: string;
+  active: boolean;
+  created_at: string;
+};
+
+// Com cliques e alcance do relatório do admin.
+export type AdWithStats = Ad & { clicks: number; reach: number };
+
+// O que a RPC active_ads devolve: sem active nem created_at, que o card não usa.
+export type AdRow = Pick<Ad, "id" | "title" | "description" | "image_path" | "target_url">;
+
 // O que o cliente recebe: caminhos do Storage já trocados por URLs assinadas.
 export type DeckCard = {
   id: string;
@@ -158,6 +175,18 @@ export type DeckCard = {
   church: string | null;
   sameChurch: boolean;
 };
+
+// O anúncio já com a imagem assinada, pronto para o card.
+export type AdCard = {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  targetUrl: string;
+};
+
+// O deck mistura pessoas e anúncios: o kind decide o que o card faz ao ser curtido.
+export type DeckItem = ({ kind: "person" } & DeckCard) | ({ kind: "ad" } & AdCard);
 
 export type ChatMessage = {
   id: string;

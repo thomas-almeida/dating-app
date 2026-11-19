@@ -3,17 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
-import { APP_NAME, DECK_SIZE, MEDIA_BUCKET, STORY_TTL_HOURS } from "@/lib/config";
+import { APP_NAME, MEDIA_BUCKET, STORY_TTL_HOURS } from "@/lib/config";
+import { loadDeckItems } from "@/lib/deck-server";
 import { requireMember } from "@/lib/dal";
 import { emailLayout, sendEmailToUser } from "@/lib/email";
-import { signPaths, toDeckCards } from "@/lib/media";
+import { signPaths } from "@/lib/media";
 import { notifyUser } from "@/lib/push";
 import { siteOrigin } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
-  DeckCard,
-  PublicProfile,
+  DeckItem,
   StoryAudienceMember,
   StoryAudienceRow,
   StoryMediaType,
@@ -36,11 +36,15 @@ const storySchema = z.object({
 
 const storyIdSchema = z.uuid();
 
+const adEventSchema = z.object({
+  adId: z.uuid(),
+  kind: z.enum(["impression", "click"]),
+});
+
 const STORY_FAILED = "Não deu para postar. Tente de novo.";
 
 // O post_story devolve estes códigos em error.message.
 const STORY_ERRORS: Record<string, string> = {
-  story_limit: "Você já postou seu story de hoje. Com o Pro, não há limite.",
   foreign_media: "Não reconhecemos esse arquivo. Envie de novo.",
 };
 
@@ -106,18 +110,12 @@ export async function recordSwipe(targetId: string, action: SwipeAction): Promis
   return { ok: true, match: true, whatsapp: contact?.whatsapp ?? null };
 }
 
-export async function loadMoreCards(): Promise<DeckCard[] | null> {
+// O refill passa pelo mesmo caminho da primeira tela: sem isso, o deck pararia de
+// mostrar anúncio depois da primeira recarga.
+export async function loadMoreCards(): Promise<DeckItem[] | null> {
   const { profile } = await requireMember();
-
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("discover_profiles", { p_limit: DECK_SIZE });
-
-  if (error) {
-    console.error("loadMoreCards", error);
-    return null;
-  }
-
-  return toDeckCards(data as PublicProfile[], profile);
+  return loadDeckItems(supabase, profile);
 }
 
 // Quem posta limpa os próprios stories vencidos, para eles não ocuparem o Storage para sempre.
@@ -215,4 +213,19 @@ export async function loadStoryAudience(storyId: string): Promise<StoryAudienceM
     photoUrl: row.photo_path ? (urls[row.photo_path] ?? null) : null,
     liked: row.liked,
   }));
+}
+
+// Métrica de anúncio. Falha aqui não pode atrapalhar quem está usando o deck, então o erro
+// só vai para o log: a exibição repetida no mesmo dia já é descartada pelo banco.
+export async function recordAdEvent(adId: string, kind: "impression" | "click") {
+  const parsed = adEventSchema.safeParse({ adId, kind });
+  if (!parsed.success) return;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("record_ad_event", {
+    p_ad: parsed.data.adId,
+    p_kind: parsed.data.kind,
+  });
+
+  if (error) console.error("recordAdEvent", error);
 }

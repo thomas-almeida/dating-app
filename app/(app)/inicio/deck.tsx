@@ -3,6 +3,7 @@
 import {
   BadgeCheck,
   ChevronRight,
+  ExternalLink,
   Heart,
   LoaderCircle,
   MapPin,
@@ -31,8 +32,9 @@ import {
 import { HobbyTags } from "@/components/hobby-tags";
 import { LoopVideo } from "@/components/loop-video";
 import { SIGNED_URL_TTL_SECONDS } from "@/lib/config";
-import type { DeckCard, SwipeAction } from "@/lib/types";
-import { loadMoreCards, recordSwipe } from "./actions";
+import { deckKey } from "@/lib/deck";
+import type { AdCard, DeckCard, DeckItem, SwipeAction } from "@/lib/types";
+import { loadMoreCards, recordAdEvent, recordSwipe } from "./actions";
 import { MatchOverlay, type MatchViewer } from "./match-overlay";
 
 type CardHandle = { swipe: (action: SwipeAction) => void };
@@ -58,60 +60,69 @@ function CardPoster({ card }: { card: DeckCard }) {
   );
 }
 
-function BackCard({ card }: { card: DeckCard }) {
+function BackCard({ item }: { item: DeckItem }) {
   return (
     <div className={`${cardClass} origin-top -translate-y-2.5 scale-[0.93] opacity-70`} aria-hidden>
-      <CardPoster card={card} />
+      {item.kind === "ad" ? (
+        <img src={item.imageUrl} alt="" className="absolute inset-0 size-full object-cover" />
+      ) : (
+        <CardPoster card={item} />
+      )}
     </div>
   );
 }
 
-function TopCard({
-  card,
-  ref,
-  onDecide,
-}: {
-  card: DeckCard;
-  ref: Ref<CardHandle>;
-  onDecide: (action: SwipeAction) => void;
-}) {
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-240, 240], [-12, 12]);
-  const likeOpacity = useTransform(x, [30, SWIPE_DISTANCE], [0, 1]);
-  const passOpacity = useTransform(x, [-SWIPE_DISTANCE, -30], [1, 0]);
-  const reducedMotion = useReducedMotion();
-  const leaving = useRef(false);
-
-  function leave(action: SwipeAction) {
-    if (leaving.current) return;
-    leaving.current = true;
-
-    if (reducedMotion) {
-      onDecide(action);
-      return;
-    }
-
-    const target = action === "like" ? EXIT_DISTANCE : -EXIT_DISTANCE;
-    animate(x, target, { duration: 0.28 }).then(() => onDecide(action));
-  }
-
-  useImperativeHandle(ref, () => ({ swipe: leave }));
+// A imagem sangra no card, e o card não tem proporção fixa: a altura depende do aparelho e
+// das safe areas. Por isso o anúncio pede 1080x1800 com o essencial na faixa central.
+function AdContent({ ad, onOpen }: { ad: AdCard; onOpen: () => void }) {
+  // A exibição é única por anúncio/pessoa/dia no banco, então repetir a chamada é inofensivo.
+  useEffect(() => {
+    void recordAdEvent(ad.id, "impression");
+  }, [ad.id]);
 
   return (
-    <motion.article
-      aria-label={`${card.displayName}${card.age ? `, ${card.age} anos` : ""}`}
-      style={{ x, rotate }}
-      drag="x"
-      dragSnapToOrigin
-      dragElastic={0.7}
-      onDragEnd={(_, { offset, velocity }) => {
-        if (offset.x > SWIPE_DISTANCE || velocity.x > SWIPE_VELOCITY) leave("like");
-        else if (offset.x < -SWIPE_DISTANCE || velocity.x < -SWIPE_VELOCITY) leave("pass");
-      }}
-      initial={{ scale: 0.95, y: -12 }}
-      animate={{ scale: 1, y: 0 }}
-      className={`${cardClass} cursor-grab active:cursor-grabbing`}
-    >
+    <>
+      <img
+        src={ad.imageUrl}
+        alt=""
+        draggable={false}
+        className="absolute inset-0 size-full object-cover"
+      />
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-linear-to-t from-black/90 via-black/40 to-transparent" />
+
+      <span className="absolute top-4 left-4 rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+        Patrocinado
+      </span>
+
+      <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-5 pt-5 pb-12">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-3xl font-semibold text-white">{ad.title}</h2>
+          <p className="mt-1 line-clamp-2 text-sm leading-snug text-white/85">{ad.description}</p>
+        </div>
+        {/* Âncora de verdade: o navegador abre sem passar pelo bloqueio de popup.
+            O stopPropagation evita que arrastar a partir do botão vire clique. */}
+        <a
+          href={ad.targetUrl}
+          target="_blank"
+          rel="noopener noreferrer nofollow sponsored"
+          aria-label={`Abrir ${ad.title}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onOpen()}
+          draggable={false}
+          className="flex shrink-0 items-center gap-1 rounded-lg bg-white/15 p-3 text-white backdrop-blur transition hover:bg-white/25"
+        >
+          <b>Abrir</b>
+          <ExternalLink className="size-4" aria-hidden />
+        </a>
+      </div>
+    </>
+  );
+}
+
+function PersonContent({ card }: { card: DeckCard }) {
+  return (
+    <>
       <CardPoster card={card} />
       {card.videoUrl && (
         <LoopVideo
@@ -128,21 +139,6 @@ function TopCard({
           <Video className="size-4" aria-label="Tem vídeo" />
         </span>
       )}
-
-      <motion.span
-        style={{ opacity: likeOpacity }}
-        className="absolute top-8 left-6 -rotate-12 rounded-xl border-2 border-coral px-3 py-1 font-display text-2xl font-semibold text-coral"
-        aria-hidden
-      >
-        Curtir
-      </motion.span>
-      <motion.span
-        style={{ opacity: passOpacity }}
-        className="absolute top-8 right-6 rotate-12 rounded-xl border-2 border-cream px-3 py-1 font-display text-2xl font-semibold text-cream"
-        aria-hidden
-      >
-        Passar
-      </motion.span>
 
       <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-5 pt-5 pb-12">
         <div className="min-w-0 flex-1">
@@ -186,12 +182,105 @@ function TopCard({
           <ChevronRight className="size-5" aria-hidden />
         </Link>
       </div>
+    </>
+  );
+}
+
+function TopCard({
+  item,
+  ref,
+  onDecide,
+  onOpenAd,
+}: {
+  item: DeckItem;
+  ref: Ref<CardHandle>;
+  onDecide: (action: SwipeAction) => void;
+  onOpenAd: () => void;
+}) {
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-240, 240], [-12, 12]);
+  const likeOpacity = useTransform(x, [30, SWIPE_DISTANCE], [0, 1]);
+  const passOpacity = useTransform(x, [-SWIPE_DISTANCE, -30], [1, 0]);
+  const reducedMotion = useReducedMotion();
+  const leaving = useRef(false);
+  const dragged = useRef(false);
+
+  const isAd = item.kind === "ad";
+
+  function leave(action: SwipeAction) {
+    if (leaving.current) return;
+    leaving.current = true;
+
+    // Curtir um anúncio abre o link, e isso tem de acontecer aqui, ainda dentro do gesto:
+    // depois da animação o navegador trata o window.open como popup e bloqueia.
+    if (isAd && action === "like") onOpenAd();
+
+    if (reducedMotion) {
+      onDecide(action);
+      return;
+    }
+
+    const target = action === "like" ? EXIT_DISTANCE : -EXIT_DISTANCE;
+    animate(x, target, { duration: 0.28 }).then(() => onDecide(action));
+  }
+
+  useImperativeHandle(ref, () => ({ swipe: leave }));
+
+  return (
+    <motion.article
+      aria-label={
+        isAd
+          ? `Anúncio: ${item.title}`
+          : `${item.displayName}${item.age ? `, ${item.age} anos` : ""}`
+      }
+      style={{ x, rotate }}
+      drag="x"
+      dragSnapToOrigin
+      dragElastic={0.7}
+      onPointerDown={() => {
+        dragged.current = false;
+      }}
+      onDragStart={() => {
+        dragged.current = true;
+      }}
+      onDragEnd={(_, { offset, velocity }) => {
+        if (offset.x > SWIPE_DISTANCE || velocity.x > SWIPE_VELOCITY) leave("like");
+        else if (offset.x < -SWIPE_DISTANCE || velocity.x < -SWIPE_VELOCITY) leave("pass");
+      }}
+      // Tocar na imagem do anúncio abre o link. O dragged separa o toque do arrasto.
+      onClick={() => {
+        if (isAd && !dragged.current) onOpenAd();
+      }}
+      initial={{ scale: 0.95, y: -12 }}
+      animate={{ scale: 1, y: 0 }}
+      className={`${cardClass} cursor-grab active:cursor-grabbing`}
+    >
+      {item.kind === "ad" ? (
+        <AdContent ad={item} onOpen={onOpenAd} />
+      ) : (
+        <PersonContent card={item} />
+      )}
+
+      <motion.span
+        style={{ opacity: likeOpacity }}
+        className="absolute top-8 left-6 -rotate-12 rounded-xl border-2 border-coral px-3 py-1 font-display text-2xl font-semibold text-coral"
+        aria-hidden
+      >
+        {isAd ? "Abrir" : "Curtir"}
+      </motion.span>
+      <motion.span
+        style={{ opacity: passOpacity }}
+        className="absolute top-8 right-6 rotate-12 rounded-xl border-2 border-cream px-3 py-1 font-display text-2xl font-semibold text-cream"
+        aria-hidden
+      >
+        Passar
+      </motion.span>
     </motion.article>
   );
 }
 
-export function Deck({ initialCards, viewer }: { initialCards: DeckCard[]; viewer: MatchViewer }) {
-  const [cards, setCards] = useState(initialCards);
+export function Deck({ initialItems, viewer }: { initialItems: DeckItem[]; viewer: MatchViewer }) {
+  const [items, setItems] = useState(initialItems);
   const [match, setMatch] = useState<{ card: DeckCard; whatsapp: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [refilling, setRefilling] = useState(false);
@@ -217,13 +306,21 @@ export function Deck({ initialCards, viewer }: { initialCards: DeckCard[]; viewe
     }
   }
 
+  function openAd(ad: AdCard) {
+    void recordAdEvent(ad.id, "click");
+
+    const opened = window.open(ad.targetUrl, "_blank", "noopener,noreferrer");
+    // Se o navegador barrar a aba nova, navega na mesma: aí não há bloqueio de popup.
+    if (!opened) window.location.href = ad.targetUrl;
+  }
+
   async function refill() {
     setRefilling(true);
     setNotice(null);
     // Sem esperar, quem acabou de passar poderia voltar antes de quem ainda não foi visto.
     await Promise.allSettled(pending.current);
 
-    let fresh: DeckCard[] | null = null;
+    let fresh: DeckItem[] | null = null;
     try {
       fresh = await loadMoreCards();
     } catch {
@@ -233,7 +330,7 @@ export function Deck({ initialCards, viewer }: { initialCards: DeckCard[]; viewe
     setRefilling(false);
     if (fresh) {
       loadedAt.current = Date.now();
-      setCards(fresh);
+      setItems(fresh);
     } else {
       setNotice("Não deu para buscar mais pessoas.");
     }
@@ -254,32 +351,38 @@ export function Deck({ initialCards, viewer }: { initialCards: DeckCard[]; viewe
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);
 
-  function decide(card: DeckCard, action: SwipeAction) {
+  function decide(item: DeckItem, action: SwipeAction) {
     setNotice(null);
 
-    const request: Promise<void> = saveSwipe(card, action).finally(() => {
-      pending.current.delete(request);
-    });
-    pending.current.add(request);
+    // Anúncio não tem linha em profiles: o record_swipe recusaria o alvo.
+    if (item.kind === "person") {
+      const request: Promise<void> = saveSwipe(item, action).finally(() => {
+        pending.current.delete(request);
+      });
+      pending.current.add(request);
+    }
 
-    const rest = cards.filter(({ id }) => id !== card.id);
-    setCards(rest);
+    const rest = items.filter((other) => deckKey(other) !== deckKey(item));
+    setItems(rest);
     if (rest.length === 0) void refill();
   }
 
-  const [current, next] = cards;
+  const [current, next] = items;
 
   return (
     <section aria-label="Pessoas" className="relative flex min-h-0 flex-1 flex-col px-4 pt-3">
       <div className="relative min-h-0 flex-1">
         {current ? (
           <>
-            {next && <BackCard key={next.id} card={next} />}
+            {next && <BackCard key={deckKey(next)} item={next} />}
             <TopCard
-              key={current.id}
+              key={deckKey(current)}
               ref={topCard}
-              card={current}
+              item={current}
               onDecide={(action) => decide(current, action)}
+              onOpenAd={() => {
+                if (current.kind === "ad") openAd(current);
+              }}
             />
           </>
         ) : (

@@ -61,12 +61,10 @@ function AudienceSheet({
 export function StoryViewer({
   person,
   isOwn,
-  isPro,
   onClose,
 }: {
   person: StoryPerson;
   isOwn: boolean;
-  isPro: boolean;
   onClose: () => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -213,23 +211,16 @@ export function StoryViewer({
         <div className="pb-safe relative z-10 mt-auto">
           <div className="flex flex-col items-center gap-3 p-5">
             {isOwn ? (
-              <>
-                <button
-                  type="button"
-                  disabled={audience === null}
-                  onClick={() => setAudienceOpen(true)}
-                  className="rounded-full bg-black/50 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition disabled:opacity-60"
-                >
-                  {audience === null
-                    ? "Quem viu"
-                    : `Visto por ${audience.length} · ${likeCount} ${likeCount === 1 ? "curtida" : "curtidas"}`}
-                </button>
-                {!isPro && (
-                  <Link href="/pro" className="text-center text-xs text-white/85 underline underline-offset-4">
-                    Você pode postar 1 story por dia. Com o Pro, não há limite.
-                  </Link>
-                )}
-              </>
+              <button
+                type="button"
+                disabled={audience === null}
+                onClick={() => setAudienceOpen(true)}
+                className="rounded-full bg-black/50 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition disabled:opacity-60"
+              >
+                {audience === null
+                  ? "Quem viu"
+                  : `Visto por ${audience.length} · ${likeCount} ${likeCount === 1 ? "curtida" : "curtidas"}`}
+              </button>
             ) : (
               <button
                 type="button"

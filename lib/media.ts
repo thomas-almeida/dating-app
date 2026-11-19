@@ -2,7 +2,7 @@ import "server-only";
 import { placeLabel, sameRegion, tagHobbies } from "@/lib/affinity";
 import { churchLabel, MEDIA_BUCKET, SIGNED_URL_TTL_SECONDS } from "@/lib/config";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { DeckCard, Profile, PublicProfile } from "@/lib/types";
+import type { AdCard, AdRow, DeckCard, Profile, PublicProfile } from "@/lib/types";
 
 // O bucket é privado. Quem chega aqui já passou pelas RPCs que decidem o que pode ser visto.
 export async function signPaths(paths: (string | null | undefined)[]) {
@@ -40,4 +40,21 @@ export async function toDeckCards(
     church: churchLabel(profile.church),
     sameChurch: profile.church !== null && profile.church === viewer.church,
   }));
+}
+
+// O anúncio só entra no deck com a imagem assinada: sem URL, o card não tem o que mostrar.
+export async function toAdCards(ads: AdRow[]): Promise<AdCard[]> {
+  const urls = await signPaths(ads.map((ad) => ad.image_path));
+
+  return ads.flatMap((ad) => {
+    const imageUrl = urls[ad.image_path];
+    if (!imageUrl) return [];
+    return [{
+      id: ad.id,
+      title: ad.title,
+      description: ad.description,
+      imageUrl,
+      targetUrl: ad.target_url,
+    }];
+  });
 }
