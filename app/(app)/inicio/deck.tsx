@@ -33,7 +33,7 @@ import { HobbyTags } from "@/components/hobby-tags";
 import { LoopVideo } from "@/components/loop-video";
 import { SIGNED_URL_TTL_SECONDS } from "@/lib/config";
 import { deckKey } from "@/lib/deck";
-import type { AdCard, DeckCard, DeckItem, SwipeAction } from "@/lib/types";
+import type { AdCard, DeckCard, DeckItem, DeckLoad, SwipeAction } from "@/lib/types";
 import { loadMoreCards, recordAdEvent, recordSwipe } from "./actions";
 import { MatchOverlay, type MatchViewer } from "./match-overlay";
 
@@ -279,8 +279,42 @@ function TopCard({
   );
 }
 
-export function Deck({ initialItems, viewer }: { initialItems: DeckItem[]; viewer: MatchViewer }) {
+// Quando o deck acaba, o anúncio aparece aqui em vez de entrar na pilha: um card de anúncio
+// sozinho faria o refill trazer o mesmo anúncio de novo, sem fim.
+function SponsoredBlock({ ad, onOpen }: { ad: AdCard; onOpen: () => void }) {
+  useEffect(() => {
+    void recordAdEvent(ad.id, "impression");
+  }, [ad.id]);
+
+  return (
+    <a
+      href={ad.targetUrl}
+      target="_blank"
+      rel="noopener noreferrer nofollow sponsored"
+      onClick={() => onOpen()}
+      className="mt-6 block overflow-hidden rounded-3xl bg-raised text-left"
+    >
+      <img src={ad.imageUrl} alt="" className="aspect-[3/5] max-h-48 w-full object-cover" />
+      <span className="block p-4">
+        <span className="block text-xs font-semibold text-muted">Patrocinado</span>
+        <span className="mt-1 block font-semibold text-cream">{ad.title}</span>
+        <span className="mt-0.5 block line-clamp-2 text-sm text-muted">{ad.description}</span>
+      </span>
+    </a>
+  );
+}
+
+export function Deck({
+  initialItems,
+  initialSpareAd,
+  viewer,
+}: {
+  initialItems: DeckItem[];
+  initialSpareAd: AdCard | null;
+  viewer: MatchViewer;
+}) {
   const [items, setItems] = useState(initialItems);
+  const [spareAd, setSpareAd] = useState(initialSpareAd);
   const [match, setMatch] = useState<{ card: DeckCard; whatsapp: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [refilling, setRefilling] = useState(false);
@@ -320,7 +354,7 @@ export function Deck({ initialItems, viewer }: { initialItems: DeckItem[]; viewe
     // Sem esperar, quem acabou de passar poderia voltar antes de quem ainda não foi visto.
     await Promise.allSettled(pending.current);
 
-    let fresh: DeckItem[] | null = null;
+    let fresh: DeckLoad | null = null;
     try {
       fresh = await loadMoreCards();
     } catch {
@@ -330,7 +364,8 @@ export function Deck({ initialItems, viewer }: { initialItems: DeckItem[]; viewe
     setRefilling(false);
     if (fresh) {
       loadedAt.current = Date.now();
-      setItems(fresh);
+      setItems(fresh.items);
+      setSpareAd(fresh.spareAd);
     } else {
       setNotice("Não deu para buscar mais pessoas.");
     }
@@ -403,6 +438,9 @@ export function Deck({ initialItems, viewer }: { initialItems: DeckItem[]; viewe
                   <RefreshCw className="size-4" aria-hidden />
                   Atualizar
                 </button>
+                {spareAd && (
+                  <SponsoredBlock ad={spareAd} onOpen={() => openAd(spareAd)} />
+                )}
               </>
             )}
           </div>

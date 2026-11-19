@@ -10,6 +10,7 @@ const people = (total: number) =>
   Array.from({ length: total }, (_, index) => person(`p${index + 1}`));
 
 const shape = (items: DeckItem[]) => items.map((item) => `${item.kind}:${item.id}`).join(" ");
+const adsIn = (items: DeckItem[]) => items.flatMap((item) => (item.kind === "ad" ? [item.id] : []));
 
 test("sem anúncio, o deck fica só com as pessoas", () => {
   const items = interleaveAds(people(4), [], 3);
@@ -25,33 +26,43 @@ test("entra um anúncio a cada N pessoas", () => {
 });
 
 test("rotaciona entre os ativos antes de repetir", () => {
-  const items = interleaveAds(people(10), [ad("a1"), ad("a2")], 3);
-  const ads = items.flatMap((item) => (item.kind === "ad" ? [item.id] : []));
-  assert.deepEqual(ads, ["a1", "a2", "a1"]);
+  assert.deepEqual(adsIn(interleaveAds(people(10), [ad("a1"), ad("a2")], 3)), ["a1", "a2", "a1"]);
 });
 
 test("um anúncio só é usado em todas as posições quando é o único ativo", () => {
-  const items = interleaveAds(people(7), [ad("a1")], 3);
-  const ads = items.flatMap((item) => (item.kind === "ad" ? [item.id] : []));
-  assert.deepEqual(ads, ["a1", "a1"]);
+  assert.deepEqual(adsIn(interleaveAds(people(7), [ad("a1")], 3)), ["a1", "a1"]);
 });
 
-// Terminar num anúncio faria o deck esvaziar com um card patrocinado na tela, e o refill
-// chegaria logo depois: fica estranho e dá a impressão de que acabaram as pessoas.
-test("o deck nunca termina num anúncio", () => {
-  for (const total of [1, 2, 3, 6, 9, 12]) {
-    const items = interleaveAds(people(total), [ad("a1"), ad("a2")], 3);
-    assert.equal(items.at(-1)?.kind, "person", `total ${total}`);
-  }
+// Com a base pequena o deck quase sempre tem menos gente que o passo. Pela regra do módulo
+// nenhum anúncio entraria, e foi exatamente isso que aconteceu em produção: o anunciante
+// estava cadastrado e ninguém via o card.
+test("pool menor que o passo ainda recebe um anúncio", () => {
+  assert.equal(shape(interleaveAds(people(1), [ad("a1")], 3)), "person:p1 ad:a1");
+  assert.equal(shape(interleaveAds(people(2), [ad("a1")], 3)), "person:p1 person:p2 ad:a1");
 });
 
-test("deck vazio continua vazio", () => {
-  assert.deepEqual(interleaveAds([], [ad("a1")], 3), []);
+test("pool do tamanho exato do passo recebe um anúncio", () => {
+  assert.equal(
+    shape(interleaveAds(people(3), [ad("a1"), ad("a2")], 3)),
+    "person:p1 person:p2 person:p3 ad:a1",
+  );
 });
 
-test("passo inválido não divide por zero nem inverte a ordem", () => {
-  const items = interleaveAds(people(3), [ad("a1")], 0);
-  assert.equal(shape(items), "person:p1 ad:a1 person:p2 ad:a1 person:p3");
+test("só um anúncio entra quando o pool é menor que o passo", () => {
+  assert.deepEqual(adsIn(interleaveAds(people(2), [ad("a1"), ad("a2")], 3)), ["a1"]);
+});
+
+// Um anúncio sozinho faria o refill trazer o mesmo anúncio de novo, em loop, e a tela
+// "Por agora, é só" nunca apareceria.
+test("deck sem ninguém não mostra anúncio", () => {
+  assert.deepEqual(interleaveAds([], [ad("a1"), ad("a2")], 3), []);
+});
+
+test("passo inválido não divide por zero", () => {
+  assert.equal(
+    shape(interleaveAds(people(3), [ad("a1")], 0)),
+    "person:p1 ad:a1 person:p2 ad:a1 person:p3 ad:a1",
+  );
 });
 
 test("a chave separa pessoa de anúncio com o mesmo id", () => {

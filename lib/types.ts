@@ -188,6 +188,11 @@ export type AdCard = {
 // O deck mistura pessoas e anúncios: o kind decide o que o card faz ao ser curtido.
 export type DeckItem = ({ kind: "person" } & DeckCard) | ({ kind: "ad" } & AdCard);
 
+// Uma carga do deck. O spareAd existe só quando não há ninguém para intercalar: um card de
+// anúncio sozinho na pilha faria o refill trazer o mesmo anúncio de novo, em loop. Então ele
+// vai para o estado vazio, fora do swipe.
+export type DeckLoad = { items: DeckItem[]; spareAd: AdCard | null };
+
 export type ChatMessage = {
   id: string;
   sender_id: string;

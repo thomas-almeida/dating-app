@@ -277,8 +277,10 @@ check(
   liveLayers,
 );
 
+// Ninguém postou story ainda: o carrossel mostra só o próprio e não lista os outros
+// usuários, que era o vazamento.
 const storyCount = await user.getByRole("list", { name: "Stories" }).getByRole("listitem").count();
-check("stories aparecem", storyCount > 0, storyCount);
+check("sem story de ninguém, o carrossel não lista usuários", storyCount === 1, storyCount);
 
 // Stories saíram do Pro: ninguém mais vê cadeado nem paywall no carrossel.
 const lockedStories = await user
@@ -430,11 +432,14 @@ await user.waitForTimeout(300);
 await shot(user, "28-perfil-pro");
 
 await user.goto(`${APP}/inicio`);
-await user.getByRole("list", { name: "Stories" }).getByRole("link").first().waitFor();
+const proStoryRow = user.getByRole("list", { name: "Stories" });
+await proStoryRow.getByRole("listitem").first().waitFor();
 await shot(user, "20-home-pro");
-await user.getByRole("list", { name: "Stories" }).getByRole("link").first().click();
-await user.waitForURL(/\/perfil\/[0-9a-f-]{36}$/);
-check("Pro toca no story e abre o perfil", true);
+check(
+  "o carrossel não vira atalho para o perfil de quem não postou",
+  (await proStoryRow.getByRole("link").count()) === 0 &&
+    (await proStoryRow.getByRole("listitem").count()) === 1,
+);
 
 await user.goto(`${APP}/pro`);
 await user.getByRole("button", { name: "Cancelar assinatura" }).click();

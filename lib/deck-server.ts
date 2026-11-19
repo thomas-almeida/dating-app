@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ADS_PER_DECK, DECK_SIZE } from "@/lib/config";
 import { interleaveAds } from "@/lib/deck";
 import { toAdCards, toDeckCards } from "@/lib/media";
-import type { AdRow, DeckItem, Profile, PublicProfile } from "@/lib/types";
+import type { AdRow, DeckLoad, Profile, PublicProfile } from "@/lib/types";
 
 /**
  * Monta uma carga do deck com pessoas e anúncios intercalados.
@@ -17,7 +17,7 @@ export async function loadDeckItems(
   supabase: SupabaseClient,
   viewer: Profile,
   limit: number = DECK_SIZE,
-): Promise<DeckItem[] | null> {
+): Promise<DeckLoad | null> {
   const [discovered, ads] = await Promise.all([
     supabase.rpc("discover_profiles", { p_limit: limit }),
     supabase.rpc("active_ads", { p_limit: ADS_PER_DECK }),
@@ -36,5 +36,9 @@ export async function loadDeckItems(
     toAdCards((ads.data ?? []) as AdRow[]),
   ]);
 
-  return interleaveAds(people, adCards);
+  // Sem gente no deck o anúncio não entra na pilha: vai para o estado vazio.
+  return {
+    items: interleaveAds(people, adCards),
+    spareAd: people.length === 0 ? (adCards[0] ?? null) : null,
+  };
 }

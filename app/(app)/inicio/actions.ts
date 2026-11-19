@@ -13,7 +13,7 @@ import { siteOrigin } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
-  DeckItem,
+  DeckLoad,
   StoryAudienceMember,
   StoryAudienceRow,
   StoryMediaType,
@@ -112,7 +112,7 @@ export async function recordSwipe(targetId: string, action: SwipeAction): Promis
 
 // O refill passa pelo mesmo caminho da primeira tela: sem isso, o deck pararia de
 // mostrar anúncio depois da primeira recarga.
-export async function loadMoreCards(): Promise<DeckItem[] | null> {
+export async function loadMoreCards(): Promise<DeckLoad | null> {
   const { profile } = await requireMember();
   const supabase = await createClient();
   return loadDeckItems(supabase, profile);

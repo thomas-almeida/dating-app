@@ -1,7 +1,6 @@
 "use client";
 
 import { LoaderCircle, Plus } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useLayoutEffect, useState, type ChangeEvent } from "react";
 import { MediaError, uploadPhoto, uploadVideo, VIDEO_ACCEPT } from "@/lib/media-upload";
 import type { StoryPerson } from "@/lib/types";
@@ -118,31 +117,19 @@ export function Stories({ people, own }: { people: StoryItem[]; own: StoryPerson
           <StoryLabel>{OWN_LABEL}</StoryLabel>
         </li>
 
-        {people.map((person) => {
-          const ring = (
-            <StoryRing label={person.label} photoUrl={person.photoUrl} active={person.hasStory} />
-          );
-
-          return (
-            <li key={person.id} className="w-15 shrink-0">
-              {person.stories.length > 0 ? (
-                <button
-                  type="button"
-                  aria-label={`Ver story de ${person.label}`}
-                  onClick={() => setViewing(person)}
-                  className="block w-full"
-                >
-                  {ring}
-                </button>
-              ) : (
-                <Link href={`/perfil/${person.id}`} className="block">
-                  {ring}
-                </Link>
-              )}
-              <StoryLabel>{person.label}</StoryLabel>
-            </li>
-          );
-        })}
+        {people.map((person) => (
+          <li key={person.id} className="w-15 shrink-0">
+            <button
+              type="button"
+              aria-label={`Ver story de ${person.label}`}
+              onClick={() => setViewing(person)}
+              className="block w-full"
+            >
+              <StoryRing label={person.label} photoUrl={person.photoUrl} active />
+            </button>
+            <StoryLabel>{person.label}</StoryLabel>
+          </li>
+        ))}
       </ul>
 
       {notice && (

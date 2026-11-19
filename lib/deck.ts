@@ -14,27 +14,38 @@ export function deckKey(item: DeckItem) {
  * ciclo: cada anúncio aparece uma vez antes de qualquer um repetir, o que distribui a
  * exibição entre os anunciantes em vez de sortear a mesma imagem várias vezes.
  *
- * Sem anúncios (ou para quem é Pro, que recebe lista vazia do servidor), devolve só as
- * pessoas — o deck fica exatamente como era antes.
+ * Com a base pequena o deck costuma ter menos gente que o passo, e nesse caso nenhum
+ * anúncio entraria pela regra do módulo. Por isso, quando o deck tem gente mas nenhum
+ * anúncio couber, um é acrescentado no fim.
+ *
+ * Deck sem ninguém devolve nada, nem anúncio: o card de anúncio sozinho faria o `refill`
+ * do deck trazer o mesmo anúncio de novo, em loop infinito, e a tela "Por agora, é só"
+ * nunca apareceria.
  */
 export function interleaveAds(
   people: DeckCard[],
   ads: AdCard[],
   every: number = ADS_EVERY,
 ): DeckItem[] {
+  const onlyPeople = () => people.map((person): DeckItem => ({ kind: "person", ...person }));
+
+  // Para quem é Pro o servidor devolve lista vazia, então o deck fica igual ao de antes.
+  if (ads.length === 0 || people.length === 0) return onlyPeople();
+
   const step = Math.max(1, Math.trunc(every));
   const items: DeckItem[] = [];
+  let used = 0;
 
   people.forEach((person, index) => {
     items.push({ kind: "person", ...person });
 
-    // Nunca termina o deck num anúncio: ele só entra se ainda vem gente depois.
-    const isLast = index === people.length - 1;
-    if (ads.length > 0 && !isLast && (index + 1) % step === 0) {
-      const ad = ads[(Math.trunc(index / step)) % ads.length];
-      items.push({ kind: "ad", ...ad });
+    if ((index + 1) % step === 0) {
+      items.push({ kind: "ad", ...ads[used % ads.length] });
+      used += 1;
     }
   });
+
+  if (used === 0) items.push({ kind: "ad", ...ads[0] });
 
   return items;
 }

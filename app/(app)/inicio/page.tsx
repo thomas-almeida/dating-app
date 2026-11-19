@@ -22,7 +22,7 @@ async function Content() {
   const supabase = await createClient();
 
   // O deck já vem com os anúncios intercalados. Para quem é Pro, só pessoas.
-  const [items, stories, feed] = await Promise.all([
+  const [deck, stories, feed] = await Promise.all([
     loadDeckItems(supabase, profile),
     supabase.rpc("story_profiles", { p_limit: STORY_COUNT }),
     supabase.rpc("story_feed"),
@@ -99,17 +99,26 @@ async function Content() {
           photoUrl: avatarUrl ?? null,
           stories: ownStories,
         }}
-        people={storyProfiles.map((story) => ({
-          id: story.id,
-          label: story.nickname ?? "",
-          photoUrl: story.photo_path ? (urls[story.photo_path] ?? null) : null,
-          hasStory: story.has_story === true,
-          stories: storiesOf(story.id),
-        }))}
+        // Só entra quem tem story aberto de verdade: se a URL assinada falhar, o anel
+        // ficaria na tela sem nada para mostrar.
+        people={storyProfiles.flatMap((story) => {
+          const stories = storiesOf(story.id);
+          if (stories.length === 0) return [];
+          return [
+            {
+              id: story.id,
+              label: story.nickname ?? "",
+              photoUrl: story.photo_path ? (urls[story.photo_path] ?? null) : null,
+              hasStory: true,
+              stories,
+            },
+          ];
+        })}
       />
 
       <Deck
-        initialItems={items ?? []}
+        initialItems={deck?.items ?? []}
+        initialSpareAd={deck?.spareAd ?? null}
         viewer={{
           name: profile.nickname ?? profile.name,
           photoUrl: avatarUrl ?? null,

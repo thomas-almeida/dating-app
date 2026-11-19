@@ -162,8 +162,13 @@ async function testCompatibility() {
   check("preferência dos dois lados aparece no deck", mutual.length === 1 && mutual[0] === ids.dora, mutual);
   const reverse = await deckOf(ids.dora);
   check("o outro lado também vê", reverse.length === 1 && reverse[0] === ids.ana, reverse);
+  await db.query(
+    "insert into public.stories (user_id, media_path, media_type) values ($1, $2, 'image')",
+    [ids.dora, `${ids.dora}/d1.jpg`],
+  );
   const pairStories = await as(ids.ana, "select id from public.story_profiles()");
   check("stories seguem a preferência", pairStories.length === 1 && pairStories[0].id === ids.dora, pairStories);
+  await db.query("delete from public.stories where user_id = $1", [ids.dora]);
   const liked = await as<{ m: boolean }>(ids.ana, "select public.record_swipe($1, 'like') as m", [ids.dora]);
   check("preferência mútua permite curtir", liked[0].m === false, liked);
   await db.query("delete from public.swipes where swiper_id = $1 and target_id = $2", [ids.ana, ids.dora]);
@@ -391,6 +396,15 @@ async function testStories() {
 
   const row = await as<{ has_story: boolean; id: string }>(ids.bruno, "select * from public.story_profiles()");
   check("quem tem story vem primeiro", row[0]?.id === ids.ana && row[0]?.has_story === true, row);
+
+  // O carrossel listava qualquer perfil com foto, o que expunha todos os usuários do app.
+  // O Carlos tem foto e nenhum story: não pode aparecer.
+  const carousel = await as<{ id: string }>(ids.ana, "select id from public.story_profiles()");
+  check(
+    "só quem tem story ativo entra no carrossel",
+    carousel.length === 1 && carousel[0].id === ids.bruno,
+    carousel,
+  );
 
   // Visualizações e curtidas
   await as(ids.carlos, "select public.view_story($1)", [next.id]);
@@ -622,7 +636,7 @@ async function run() {
   check("descoberta não expõe birth_date", !("birth_date" in discover[0]), discover[0]);
   check("idade calculada", typeof discover[0].age === "number" && (discover[0].age as number) >= 18, discover[0]);
   const stories = await as(ids.ana, "select * from public.story_profiles()");
-  check("stories trazem foto", stories.length === 2 && Boolean(stories[0].photo_path), stories);
+  check("sem story ativo, o carrossel fica vazio", stories.length === 0, stories);
   const ghost = await as(ids.intruso, "select * from public.discover_profiles()");
   check("sem perfil, descoberta vazia", ghost.length === 0, ghost);
 
